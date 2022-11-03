@@ -8,7 +8,7 @@ $dotenv->load();
 
 $webSocketsClient = new \CodeInsights\Debugger\Agent\WebSocketsClient();
 
-$loop = \React\EventLoop\Factory::create();
+$loop = \React\EventLoop\Loop::get();
 
 $loop->addPeriodicTimer(1, function () use ($webSocketsClient) {
     $webSocketsClient->uploadSnapshots();
