@@ -25,13 +25,13 @@ class WebSocketsClient {
         switch ($message->event)
         {
             case 'pusher:connection_established';
-                return $this->handleCommandConnectionEstablished($message);
+                return $this->handleCommandConnectionEstablished($message->data);
             case 'pusher_internal:subscription_succeeded';
                 // Ignoring
                 return $this->doNotRespond();
             default:
                 if (isset($this->commandHandlers[$message->event])) {
-                    return $this->agent->{ $this->commandHandlers[$message->event] }($message);
+                    return $this->agent->{ $this->commandHandlers[$message->event] }($message->data);
                 } else {
                     d('Unknown command received.');
                 }
@@ -40,9 +40,9 @@ class WebSocketsClient {
         return $this->doNotRespond();
     }
 
-    private function handleCommandConnectionEstablished(stdClass $message) : array
+    private function handleCommandConnectionEstablished(stdClass $request) : array
     {
-        $socket_id = $message->data->socket_id;
+        $socket_id = $request->socket_id;
 
         // TODO: Obtain authentication signature from external service (which validates if access to the channel can be granted?) (or just knows / gives the channel name)
         $authentication_signature = hash_hmac('sha256', $socket_id . ':' . 'private-' . $_ENV['CODEINSIGHTS_MESSAGING_SERVER_CHANNEL'], $_ENV['CODEINSIGHTS_MESSAGING_SERVER_SECRET']);
