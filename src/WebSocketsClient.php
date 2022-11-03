@@ -6,12 +6,20 @@ use Exception, stdClass;
 
 class WebSocketsClient {
 
+    private Agent $agent;
+    private array $commandHandlers;
+
+    public function __construct()
+    {
+        $this->agent = new Agent($this);
+    }
+
     public function handleIncomingMessage(stdClass $message) : array
     {
         if (isset($message->event) === false)
         {
             d('Invalid message received.');
-            return [];
+            return $this->doNotRespond();
         }
 
         switch ($message->event)
@@ -20,15 +28,16 @@ class WebSocketsClient {
                 return $this->handleCommandConnectionEstablished($message);
             case 'pusher_internal:subscription_succeeded';
                 // Ignoring
-                return [];
-            // TODO:
-            case 'client-my-manual-event':
-                return $this->handleCommandCustom($message);
+                return $this->doNotRespond();
+            default:
+                if (isset($this->commandHandlers[$message->event])) {
+                    return $this->agent->{ $this->commandHandlers[$message->event] }($message);
+                } else {
+                    d('Unknown command received.');
+                }
         }
 
-        d('Unknown command received.');
-
-        return [];
+        return $this->doNotRespond();
     }
 
     private function handleCommandConnectionEstablished(stdClass $message) : array
@@ -47,25 +56,31 @@ class WebSocketsClient {
         ];
     }
 
-    private function handleCommandCustom(stdClass $message) : array
+    public function prepareResponse($event, array $response) : array
     {
         return [
-            'event' => 'client-my-manual-event-response',
+            'event' => $event,
             'channel' => 'private-' . $_ENV['CODEINSIGHTS_MESSAGING_SERVER_CHANNEL'],
             'data' => [
-                'Some random gibberish in response: ' . time(),
+                $response,
             ],
         ];
     }
 
-    public function uploadSnapshots() : void
+    public function doNotRespond() : array
     {
-        // TODO
-        // d('Checking for new dumps to upload.');
-        // TODO: Ping pong
-        // TODO: And if haven't heard back - disable debugging
+        return [];
     }
 
+    public function performMaintenance() : void
+    {
+        $this->agent->performMaintenance();
+    }
+
+    public function registerCallback($command, $handler) : void
+    {
+        $this->commandHandlers[$command] = $handler;
+    }
 }
 
 function d(mixed $variable = '')

@@ -10,8 +10,9 @@ $webSocketsClient = new \CodeInsights\Debugger\Agent\WebSocketsClient();
 
 $loop = \React\EventLoop\Loop::get();
 
-$loop->addPeriodicTimer(1, function () use ($webSocketsClient) {
-    $webSocketsClient->uploadSnapshots();
+// Check every 10 seconds if peers are alive and perform cleanup of inactive breakpoints
+$loop->addPeriodicTimer(10, function () use ($webSocketsClient) {
+    $webSocketsClient->performMaintenance();
 });
 
 $connectionOptions = [
@@ -54,7 +55,9 @@ $connector($messagingServerEndpoint)->then(function ($connection) use ($webSocke
     // as $this->emit('response-sent', [$msg, $this]);
     // in src/WebSocket.php
     $connection->on('response-sent', function ($msg) {
-        echo "Sent: {$msg}\n";
+        if (empty(trim($msg)) === false) {
+            echo "Sent: {$msg}\n";
+        }
     });
 
 // TODO: On "close" event handler?
