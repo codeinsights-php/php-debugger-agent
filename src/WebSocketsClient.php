@@ -36,13 +36,13 @@ class WebSocketsClient {
         $socket_id = $message->data->socket_id;
 
         // TODO: Obtain authentication signature from external service (which validates if access to the channel can be granted?) (or just knows / gives the channel name)
-        $authentication_signature = hash_hmac('sha256', $socket_id . ':' . $_ENV['CODEINSIGHTS_MESSAGING_SERVER_CHANNEL'], $_ENV['CODEINSIGHTS_MESSAGING_SERVER_SECRET']);
+        $authentication_signature = hash_hmac('sha256', $socket_id . ':' . 'private-' . $_ENV['CODEINSIGHTS_MESSAGING_SERVER_CHANNEL'], $_ENV['CODEINSIGHTS_MESSAGING_SERVER_SECRET']);
 
         return [
             'event' => 'pusher:subscribe',
             'data' => [
                 'auth' => $_ENV['CODEINSIGHTS_MESSAGING_SERVER_KEY'] . ':' . $authentication_signature,
-                'channel' => $_ENV['CODEINSIGHTS_MESSAGING_SERVER_CHANNEL'],
+                'channel' => 'private-' . $_ENV['CODEINSIGHTS_MESSAGING_SERVER_CHANNEL'],
             ]
         ];
     }
@@ -51,7 +51,7 @@ class WebSocketsClient {
     {
         return [
             'event' => 'client-my-manual-event-response',
-            'channel' => $_ENV['CODEINSIGHTS_MESSAGING_SERVER_CHANNEL'],
+            'channel' => 'private-' . $_ENV['CODEINSIGHTS_MESSAGING_SERVER_CHANNEL'],
             'data' => [
                 'Some random gibberish in response: ' . time(),
             ],
