@@ -12,16 +12,19 @@ class Agent {
     public function __construct (
         private WebSocketsClient $webSocketsClient,
     ) {
-        $this->webSocketsClient->registerCallback('test-set-breakpoint', 'setBreakpoint');
+        $this->webSocketsClient->registerCallback('test-set-breakpoint', 'handleSetBreakpoint');
+        $this->webSocketsClient->registerCallback('test-remove-breakpoint', 'handleRemoveBreakpoint');
         $this->webSocketsClient->registerCallback('test-keepalive', 'handleClientKeepalive');
 
         // Clear existing breakpoints from the configuration file upon startup
         $this->saveBreakpointsInConfigurationFile();
     }
 
-    public function setBreakpoint(stdClass $request) : array
+    public function handleSetBreakpoint(stdClass $request) : array
     {
         d('Handling command setBreakpoint');
+
+        $this->markClientAsActive($request->clientId);
 
         $filePath = $_ENV['CODEINSIGHTS_PROJECT_WEBROOT'] . $request->filePath;
 
@@ -48,7 +51,8 @@ class Agent {
         {
             return $this->webSocketsClient->prepareResponse('set-breakpoint-response', (array) $request + [
                 'error' => true,
-                'errorMessage' => 'PHP file contents differ. Please make sure you are using identical version to the one in production environment when setting breakpoints.',
+                'errorMessage' => 'PHP file contents differ. Please make sure you are using identical version ' .
+                    'to the one in production environment when setting breakpoints.',
 
                 // TODO: Remove after debugging
                 'expectedFileHash' => $fileHash,
@@ -60,12 +64,24 @@ class Agent {
             || in_array($request->clientId, $this->breakpoints[$request->filePath][$request->lineNo]) === false
         ) {
             $this->breakpoints[$request->filePath][$request->lineNo][] = $request->clientId;
-            $this->markClientAsActive($request->clientId);
         }
 
         $this->saveBreakpointsInConfigurationFile();
 
         return $this->webSocketsClient->prepareResponse('set-breakpoint-response', (array) $request + [
+            'error' => false,
+        ]);
+    }
+
+    public function handleRemoveBreakpoint(stdClass $request) : array
+    {
+        $this->markClientAsActive($request->clientId);
+
+        $this->removeBreakpoint($request->filePath, $request->lineNo, $request->clientId);
+
+        $this->saveBreakpointsInConfigurationFile();
+
+        return $this->webSocketsClient->prepareResponse('remove-breakpoint-response', (array) $request + [
             'error' => false,
         ]);
     }
@@ -81,7 +97,7 @@ class Agent {
 
     public function performMaintenance() : void
     {
-        d('Performing maintenance');
+        // d('Performing maintenance');
 
         // TODO: Make configurable?
         $clientTimeoutSeconds = 60;
@@ -93,6 +109,7 @@ class Agent {
             {
                 d($clientId . ' has been last seen more than ' . $clientTimeoutSeconds . ' seconds ago. Removing breakpoints set by this client.');
                 $this->removeBreakpointSetByClient($clientId);
+                unset($this->activeClients[$clientId]);
             }
         }
     }
@@ -108,31 +125,43 @@ class Agent {
         {
             foreach ($lines as $lineNo => $clients)
             {
-                foreach ($clients as $array_key => $client)
-                {
-                    if ($client === $clientId)
-                    {
-                        unset($this->breakpoints[$filePath][$lineNo][$array_key]);
-
-                        if (empty($this->breakpoints[$filePath][$lineNo]))
-                        {
-                            unset($this->breakpoints[$filePath][$lineNo]);
-                        }
-
-                        if (empty($this->breakpoints[$filePath]))
-                        {
-                            unset($this->breakpoints[$filePath]);
-                        }
-                    }
-                }
+                $this->removeBreakpoint($filePath, $lineNo, $clientId);
             }
         }
 
         $this->saveBreakpointsInConfigurationFile();
     }
 
+    private function removeBreakpoint($filePath, $lineNo, $clientId) : void
+    {
+        if (isset($this->breakpoints[$filePath][$lineNo]) === false)
+        {
+            return;
+        }
+
+        foreach ($this->breakpoints[$filePath][$lineNo] as $array_key => $client)
+        {
+            if ($client === $clientId)
+            {
+                unset($this->breakpoints[$filePath][$lineNo][$array_key]);
+
+                if (empty($this->breakpoints[$filePath][$lineNo]))
+                {
+                    unset($this->breakpoints[$filePath][$lineNo]);
+                }
+
+                if (empty($this->breakpoints[$filePath]))
+                {
+                    unset($this->breakpoints[$filePath]);
+                }
+            }
+        }
+    }
+
     private function saveBreakpointsInConfigurationFile() : void
     {
+        print_r($this->breakpoints);
+
         $debuggerCallback = '\\CodeInsights\\Debugger\\Helper::debug(\'\', \'\', get_defined_vars(), debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS), __FILE__, __LINE__);';
         $breakpointsConfiguration = '';
 
