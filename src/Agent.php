@@ -51,7 +51,7 @@ class Agent {
         {
             return $this->webSocketsClient->prepareResponse('client-set-breakpoint-response', (array) $request + [
                 'error' => true,
-                'errorMessage' => 'PHP file contents differ. Please make sure you are using identical version ' .
+                'errorMessage' => 'PHP file contents in production environment differ. Please make sure you are using identical version ' .
                     'to the one in production environment when setting breakpoints.',
 
                 // TODO: Remove after debugging
