@@ -12,9 +12,9 @@ class Agent {
     public function __construct (
         private WebSocketsClient $webSocketsClient,
     ) {
-        $this->webSocketsClient->registerCallback('test-set-breakpoint', 'handleSetBreakpoint');
-        $this->webSocketsClient->registerCallback('test-remove-breakpoint', 'handleRemoveBreakpoint');
-        $this->webSocketsClient->registerCallback('test-keepalive', 'handleClientKeepalive');
+        $this->webSocketsClient->registerCallback('client-set-breakpoint', 'handleSetBreakpoint');
+        $this->webSocketsClient->registerCallback('client-remove-breakpoint', 'handleRemoveBreakpoint');
+        $this->webSocketsClient->registerCallback('client-keepalive', 'handleClientKeepalive');
 
         // Clear existing breakpoints from the configuration file upon startup
         $this->saveBreakpointsInConfigurationFile();
@@ -31,7 +31,7 @@ class Agent {
         // Validate that breakpoints are not being set outside the webroot
         if (str_starts_with(realpath($filePath), $_ENV['CODEINSIGHTS_PROJECT_WEBROOT']) === false)
         {
-            return $this->webSocketsClient->prepareResponse('set-breakpoint-response', (array) $request + [
+            return $this->webSocketsClient->prepareResponse('client-set-breakpoint-response', (array) $request + [
                 'error' => true,
                 'errorMessage' => 'Invalid file path provided.',
             ]);
@@ -39,7 +39,7 @@ class Agent {
 
         if (file_exists($filePath) !== true)
         {
-            return $this->webSocketsClient->prepareResponse('set-breakpoint-response', (array) $request + [
+            return $this->webSocketsClient->prepareResponse('client-set-breakpoint-response', (array) $request + [
                 'error' => true,
                 'errorMessage' => 'File does not exist.',
             ]);
@@ -49,7 +49,7 @@ class Agent {
 
         if ($request->fileHash !== $fileHash)
         {
-            return $this->webSocketsClient->prepareResponse('set-breakpoint-response', (array) $request + [
+            return $this->webSocketsClient->prepareResponse('client-set-breakpoint-response', (array) $request + [
                 'error' => true,
                 'errorMessage' => 'PHP file contents differ. Please make sure you are using identical version ' .
                     'to the one in production environment when setting breakpoints.',
@@ -68,7 +68,7 @@ class Agent {
 
         $this->saveBreakpointsInConfigurationFile();
 
-        return $this->webSocketsClient->prepareResponse('set-breakpoint-response', (array) $request + [
+        return $this->webSocketsClient->prepareResponse('client-set-breakpoint-response', (array) $request + [
             'error' => false,
         ]);
     }
@@ -81,7 +81,7 @@ class Agent {
 
         $this->saveBreakpointsInConfigurationFile();
 
-        return $this->webSocketsClient->prepareResponse('remove-breakpoint-response', (array) $request + [
+        return $this->webSocketsClient->prepareResponse('client-remove-breakpoint-response', (array) $request + [
             'error' => false,
         ]);
     }
@@ -167,7 +167,7 @@ class Agent {
 
         foreach ($this->breakpoints as $filePath => $breakpoint)
         {
-            $breakpointsConfiguration .= $filePath . "\n" . array_key_first($breakpoint) . "\n" . $debuggerCallback . "\n";
+            $breakpointsConfiguration .= $_ENV['CODEINSIGHTS_PROJECT_WEBROOT'] . $filePath . "\n" . array_key_first($breakpoint) . "\n" . $debuggerCallback . "\n";
         }
 
         $breakpointsConfiguration = rtrim($breakpointsConfiguration, "\n");
