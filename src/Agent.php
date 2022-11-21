@@ -8,6 +8,7 @@ class Agent {
 
     private array $breakpoints = [];
     private array $activeClients = [];
+    private array $processTimestamps = [];
 
     public function __construct (
         private WebSocketsClient $webSocketsClient,
@@ -99,6 +100,19 @@ class Agent {
     {
         // d('Performing maintenance');
 
+        $this->removeExpiredBreakpoints();
+    }
+
+    private function removeExpiredBreakpoints() : void
+    {
+        // TODO: Make time interval between process runs configurable
+        if ($this->alreadyRun('removing-expired-breakpoints', 10))
+        {
+            return;
+        }
+
+        // d('Removing expired breakpoints');
+
         // TODO: Make configurable?
         $clientTimeoutSeconds = 60;
 
@@ -112,6 +126,17 @@ class Agent {
                 unset($this->activeClients[$clientId]);
             }
         }
+    }
+
+    private function alreadyRun($process, $timeIntervalInSeconds) : bool
+    {
+        if (isset($this->processTimestamps[$process]) === false || time() > $this->processTimestamps[$process] + $timeIntervalInSeconds)
+        {
+            $this->processTimestamps[$process] = time();
+            return false;
+        }
+
+        return true;
     }
 
     private function markClientAsActive($clientId) : void

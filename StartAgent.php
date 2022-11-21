@@ -10,8 +10,10 @@ $webSocketsClient = new \CodeInsights\Debugger\Agent\WebSocketsClient();
 
 $loop = \React\EventLoop\Loop::get();
 
-// Check every 10 seconds if peers are alive and perform cleanup of inactive breakpoints
-$loop->addPeriodicTimer(10, function () use ($webSocketsClient) {
+// Check every 100 ms if periodic tasks have to be performed
+// (like checking if peers are alive and performing cleanup of inactive breakpoints or sending accumulated logs)
+// TODO: Make intensity configurable?
+$loop->addPeriodicTimer(0.1, function () use ($webSocketsClient) {
     $webSocketsClient->performMaintenance();
 });
 

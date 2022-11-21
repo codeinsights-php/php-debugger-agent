@@ -8,6 +8,7 @@ class WebSocketsClient {
 
     private Agent $agent;
     private array $commandHandlers;
+    private bool $isConnectedToServer = false;
 
     public function __construct()
     {
@@ -24,10 +25,10 @@ class WebSocketsClient {
 
         switch ($message->event)
         {
-            case 'pusher:connection_established';
+            case 'pusher:connection_established':
                 return $this->handleCommandConnectionEstablished($message->data);
-            case 'pusher_internal:subscription_succeeded';
-                // Ignoring
+            case 'pusher_internal:subscription_succeeded':
+                $this->isConnectedToServer = true;
                 return $this->doNotRespond();
             default:
                 if (isset($this->commandHandlers[$message->event])) {
@@ -74,7 +75,10 @@ class WebSocketsClient {
 
     public function performMaintenance() : void
     {
-        $this->agent->performMaintenance();
+        if ($this->isConnectedToServer)
+        {
+            $this->agent->performMaintenance();
+        }
     }
 
     public function registerCallback($command, $handler) : void
