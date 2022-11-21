@@ -101,6 +101,7 @@ class Agent {
         // d('Performing maintenance');
 
         $this->removeExpiredBreakpoints();
+        $this->sendLogsToServer();
     }
 
     private function removeExpiredBreakpoints() : void
@@ -125,6 +126,36 @@ class Agent {
                 $this->removeBreakpointSetByClient($clientId);
                 unset($this->activeClients[$clientId]);
             }
+        }
+    }
+
+    private function sendLogsToServer() : void
+    {
+        // TODO: Make time interval between process runs configurable
+        if ($this->alreadyRun('sending-logs', 1))
+        {
+            return;
+        }
+
+        // d('Sending logs');
+
+        $logPath = dirname(ini_get('codeinsights.breakpoint_file')) . '/logs/';
+        $logs = scandir($logPath, SCANDIR_SORT_ASCENDING);
+
+        foreach ($logs as $logFilename)
+        {
+            IF ($logFilename == '.' || $logFilename == '..')
+            {
+                continue;
+            }
+
+            $logFile = $logPath . $logFilename;
+
+            $payload = base64_encode(gzdeflate(file_get_contents($logFile), 9, ZLIB_ENCODING_DEFLATE));
+
+            $this->webSocketsClient->sendMessage('client-debugging-event', $payload);
+
+            unlink($logFile);
         }
     }
 

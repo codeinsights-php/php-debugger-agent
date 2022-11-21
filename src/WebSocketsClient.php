@@ -9,6 +9,7 @@ class WebSocketsClient {
     private Agent $agent;
     private array $commandHandlers;
     private bool $isConnectedToServer = false;
+    public $connection;
 
     public function __construct()
     {
@@ -66,6 +67,17 @@ class WebSocketsClient {
                 $response,
             ],
         ];
+    }
+
+    public function sendMessage($event, $data)
+    {
+        $this->connection->send(json_encode(
+            [
+                'event' => $event,
+                'channel' => 'private-' . $_ENV['CODEINSIGHTS_MESSAGING_SERVER_CHANNEL'],
+                'data' => $data,
+            ]
+        ));
     }
 
     public function doNotRespond() : array

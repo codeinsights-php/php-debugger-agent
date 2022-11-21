@@ -34,6 +34,8 @@ $messagingServerEndpoint = 'wss://' . $_ENV['CODEINSIGHTS_MESSAGING_SERVER_HOST'
 
 // https://pusher.com/docs/channels/library_auth_reference/pusher-websockets-protocol/
 $connector($messagingServerEndpoint)->then(function ($connection) use ($webSocketsClient) {
+    $webSocketsClient->connection = $connection;
+
     $connection->on('message', function ($msg) use ($connection, $webSocketsClient) {
         echo "Received: {$msg}\n";
 
