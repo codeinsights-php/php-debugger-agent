@@ -144,7 +144,7 @@ class Agent {
 
         foreach ($logs as $logFilename)
         {
-            IF ($logFilename == '.' || $logFilename == '..')
+            if ($logFilename == '.' || $logFilename == '..')
             {
                 continue;
             }
@@ -216,7 +216,6 @@ class Agent {
 
     private function saveBreakpointsInConfigurationFile() : void
     {
-        print_r($this->breakpoints);
 
         $debuggerCallback = '\\CodeInsights\\Debugger\\Helper::debug(\'\', \'\', get_defined_vars(), debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS), __FILE__, __LINE__);';
         $breakpointsConfiguration = '';
