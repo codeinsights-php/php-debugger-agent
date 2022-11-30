@@ -70,7 +70,7 @@ class WebSocketsClient {
     private function handleCommandConnectionEstablished(stdClass $request) : array
     {
         // TODO: Add some verbose logging here
-        $apiEndpoint = $_ENV['API_ENDPOINT'] . 'ide/authenticate-connection/';
+        $apiEndpoint = $_ENV['API_ENDPOINT'] . 'authenticate-connection/';
         $data = [
             'api_key_id' => $_ENV['API_KEY_ID'],
             'channel_name' => $this->channelName,
