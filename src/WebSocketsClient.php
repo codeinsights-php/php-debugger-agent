@@ -69,15 +69,53 @@ class WebSocketsClient {
 
     private function handleCommandConnectionEstablished(stdClass $request) : array
     {
-        $socket_id = $request->socket_id;
+        // TODO: Add some verbose logging here
+        $apiEndpoint = $_ENV['API_ENDPOINT'] . 'ide/authenticate-connection/';
+        $data = [
+            'api_key_id' => $_ENV['API_KEY_ID'],
+            'channel_name' => $this->channelName,
+            'socket_id' => $request->socket_id,
+        ];
 
-        // TODO: Obtain authentication signature from external service (which validates if access to the channel can be granted?) (or just knows / gives the channel name)
-        $authentication_signature = hash_hmac('sha256', $socket_id . ':' . $this->channelName, $_ENV['CODEINSIGHTS_MESSAGING_SERVER_SECRET']);
+        // use key 'http' even if you send the request to https://...
+        $options = array(
+            'http' => array(
+                'header'  => "Content-type: application/x-www-form-urlencoded\r\n",
+                'method'  => 'POST',
+                'content' => http_build_query($data),
+            ),
+        );
+
+        if (isset($_ENV['ENVIRONMENT']) && $_ENV['ENVIRONMENT'] == 'dev') {
+            $options['ssl'] = array(
+                'verify_peer' => false,
+                'verify_peer_name' => false,
+            );
+        }
+
+        $context  = stream_context_create($options);
+        $result = file_get_contents($apiEndpoint, false, $context);
+
+        if ($result === false) {
+            d('Error retrieving authentication signature.');
+            sleep(30);
+            die();
+        }
+
+        $response = json_decode($result);
+
+        if ($response === false && isset($response->auth) !== true) {
+            d('Invalid API response when retrieving authentication signature.');
+            sleep(30);
+            die();
+        }
+
+        $authentication_signature = $response->auth;
 
         return [
             'event' => 'pusher:subscribe',
             'data' => [
-                'auth' => $_ENV['CODEINSIGHTS_MESSAGING_SERVER_KEY'] . ':' . $authentication_signature,
+                'auth' => $authentication_signature,
                 'channel' => $this->channelName,
             ]
         ];
