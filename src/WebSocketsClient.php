@@ -23,7 +23,7 @@ class WebSocketsClient {
             d('E2E encryption enabled.');
         }
 
-        $this->channelName = 'private-' . ($this->useE2Eencryption === true ? 'encrypted-' : '') . $_ENV['CODEINSIGHTS_MESSAGING_SERVER_CHANNEL'];
+        $this->channelName = 'private-' . ($this->useE2Eencryption === true ? 'encrypted-' : '') . $_ENV['API_KEY_ID'] . '-' . $_ENV['API_KEY_ACCESS_TOKEN'];
     }
 
     public function handleIncomingMessage(stdClass $message) : array
