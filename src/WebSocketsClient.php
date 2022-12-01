@@ -56,6 +56,27 @@ class WebSocketsClient {
             case 'pusher_internal:subscription_succeeded':
                 $this->isConnectedToServer = true;
                 return $this->doNotRespond();
+            case 'pusher:error':
+
+                // stdClass Object
+                // (
+                //     [event] => pusher:error
+                //     [data] => stdClass Object
+                //         (
+                //             [code] =>
+                //             [message] => The data content of this event exceeds the allowed maximum (10240 bytes). See https://pusher.com/docs/channels/server_api/http-api#publishing-events for more info
+                //         )
+                // )
+
+                if (isset($message->data->message) && strpos($message->data->message, 'The data content of this event exceeds the allowed maximum (10240 bytes)') !== false)
+                {
+                    return $this->prepareResponse('client-agent-encountered-error', ['errorCode' => 'DATA_CONTENT_LIMIT_EXCEEDED']);
+                }
+
+                // TODO: Perform additional logging / reporting of received Pusher error messages
+
+                return $this->doNotRespond();
+
             default:
                 if (isset($this->commandHandlers[$message->event])) {
                     return $this->agent->{ $this->commandHandlers[$message->event] }($message->data);
@@ -182,13 +203,15 @@ class WebSocketsClient {
             ];
         }
 
-        $this->connection->send(json_encode(
-            [
-                'event' => $event,
-                'channel' => $this->channelName,
-                'data' => $data,
-            ]
-        ));
+        $dataToSend = json_encode([
+            'event' => $event,
+            'channel' => $this->channelName,
+            'data' => $data,
+        ]);
+
+        d('Sent message size: ' . strlen($dataToSend));
+
+        $this->connection->send($dataToSend);
     }
 
     public function doNotRespond() : array
