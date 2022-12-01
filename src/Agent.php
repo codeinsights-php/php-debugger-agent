@@ -151,9 +151,7 @@ class Agent {
 
             $logFile = $logPath . $logFilename;
 
-            $payload = base64_encode(gzdeflate(file_get_contents($logFile), 9, ZLIB_ENCODING_DEFLATE));
-
-            $this->webSocketsClient->sendMessage('client-debugging-event', $payload);
+            $this->webSocketsClient->sendMessage('client-debugging-event', file_get_contents($logFile), compress: true);
 
             unlink($logFile);
         }

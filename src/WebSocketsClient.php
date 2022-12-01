@@ -145,19 +145,40 @@ class WebSocketsClient {
         ];
     }
 
-    public function sendMessage($event, $data)
+    // TODO: DRY up to include prepareResponse() functionality
+    public function sendMessage($event, $data, $compress = false)
     {
+        d('Message to be sent (before optional encryption and compression)');
+        print_r($data);
+        echo "\n";
+
+        if ($compress === true) {
+            $data = gzdeflate($data, 9, ZLIB_ENCODING_DEFLATE);
+
+            if ($this->useE2Eencryption !== true) {
+                $data = base64_encode($data);
+            }
+        }
+
         if ($this->useE2Eencryption === true)
         {
-            d('Message to be sent (before encryption)');
-            print_r($data);
-
             $nonce = random_bytes(SODIUM_CRYPTO_SECRETBOX_NONCEBYTES);
             $ciphertext = sodium_crypto_secretbox($data, $nonce, base64_decode($_ENV['CODEINSIGHTS_MESSAGING_SERVER_ENCRYPTION_KEY_BASE64_ENCODED']));
 
             $data = [
                 'nonce' => base64_encode($nonce),
                 'ciphertext' => base64_encode($ciphertext),
+            ];
+
+            if ($compress === true) {
+                $data['compressed'] = true;
+            }
+        }
+        elseif ($compress === true)
+        {
+            $data = [
+                'message' => $data,
+                'compressed' => true,
             ];
         }
 
