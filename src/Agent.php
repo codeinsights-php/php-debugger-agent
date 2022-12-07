@@ -201,8 +201,10 @@ class Agent
         $debuggerCallback = '\\CodeInsights\\Debugger\\Helper::debug(\'\', \'\', get_defined_vars(), debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS), __FILE__, __LINE__);';
         $breakpointsConfiguration = '';
 
-        foreach ($this->breakpoints as $filePath => $breakpoint) {
-            $breakpointsConfiguration .= $_ENV['CODEINSIGHTS_PROJECT_WEBROOT'] . $filePath . "\n" . array_key_first($breakpoint) . "\n" . $debuggerCallback . "\n";
+        foreach ($this->breakpoints as $filePath => $listOfBreakpoints) {
+            foreach (array_keys($listOfBreakpoints) as $breakpoint) {
+                $breakpointsConfiguration .= $_ENV['CODEINSIGHTS_PROJECT_WEBROOT'] . $filePath . "\n" . $breakpoint . "\n" . $debuggerCallback . "\n";
+            }
         }
 
         $breakpointsConfiguration = rtrim($breakpointsConfiguration, "\n");

@@ -77,7 +77,7 @@ class WebSocketsClient
                 if (isset($this->commandHandlers[$message->event])) {
                     return $this->agent->{ $this->commandHandlers[$message->event] }($message->data);
                 } else {
-                    d('Unknown command received.');
+                    d('Unknown command received:' . $message->event);
                 }
         }
 
