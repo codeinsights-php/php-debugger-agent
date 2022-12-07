@@ -2,10 +2,11 @@
 
 namespace CodeInsights\Debugger\Agent;
 
-use Exception, stdClass;
+use Exception;
+use stdClass;
 
-class WebSocketsClient {
-
+class WebSocketsClient
+{
     private Agent $agent;
     private array $commandHandlers;
     private bool $isConnectedToServer = false;
@@ -18,25 +19,22 @@ class WebSocketsClient {
         $this->agent = new Agent($this);
         $this->useE2Eencryption = (isset($_ENV['CODEINSIGHTS_MESSAGING_SERVER_USE_E2E_ENCRYPTION']) && $_ENV['CODEINSIGHTS_MESSAGING_SERVER_USE_E2E_ENCRYPTION'] === 'true');
 
-        if ($this->useE2Eencryption)
-        {
+        if ($this->useE2Eencryption) {
             d('E2E encryption enabled.');
         }
 
         $this->channelName = 'private-' . ($this->useE2Eencryption === true ? 'encrypted-' : '') . $_ENV['API_KEY_ID'] . '-' . $_ENV['API_KEY_ACCESS_TOKEN'];
     }
 
-    public function handleIncomingMessage(stdClass $message) : array
+    public function handleIncomingMessage(stdClass $message): array
     {
-        if (isset($message->event) === false)
-        {
+        if (isset($message->event) === false) {
             d('Invalid message received.');
             return $this->doNotRespond();
         }
 
         // Some messages (e.g. during authentication) are not encrypted
-        if (isset($message->data->ciphertext) && isset($message->data->nonce))
-        {
+        if (isset($message->data->ciphertext) && isset($message->data->nonce)) {
             $encryptionKey = base64_decode($_ENV['CODEINSIGHTS_MESSAGING_SERVER_ENCRYPTION_KEY_BASE64_ENCODED']);
             $nonce = base64_decode($message->data->nonce);
             $encryptedMessage = base64_decode($message->data->ciphertext);
@@ -49,8 +47,7 @@ class WebSocketsClient {
             print_r($message->data);
         }
 
-        switch ($message->event)
-        {
+        switch ($message->event) {
             case 'pusher:connection_established':
                 return $this->handleCommandConnectionEstablished($message->data);
             case 'pusher_internal:subscription_succeeded':
@@ -68,8 +65,7 @@ class WebSocketsClient {
                 //         )
                 // )
 
-                if (isset($message->data->message) && strpos($message->data->message, 'The data content of this event exceeds the allowed maximum (10240 bytes)') !== false)
-                {
+                if (isset($message->data->message) && strpos($message->data->message, 'The data content of this event exceeds the allowed maximum (10240 bytes)') !== false) {
                     return $this->prepareResponse('client-agent-encountered-error', ['errorCode' => 'DATA_CONTENT_LIMIT_EXCEEDED']);
                 }
 
@@ -88,7 +84,7 @@ class WebSocketsClient {
         return $this->doNotRespond();
     }
 
-    private function handleCommandConnectionEstablished(stdClass $request) : array
+    private function handleCommandConnectionEstablished(stdClass $request): array
     {
         // TODO: Add some verbose logging here
         $apiEndpoint = $_ENV['API_ENDPOINT'] . 'authenticate-connection/';
@@ -142,10 +138,9 @@ class WebSocketsClient {
         ];
     }
 
-    public function prepareResponse($event, array $response) : array
+    public function prepareResponse($event, array $response): array
     {
-        if ($this->useE2Eencryption === true)
-        {
+        if ($this->useE2Eencryption === true) {
             // TODO: Add logger
             d('Message to be sent (before encryption)');
             print_r($response);
@@ -181,8 +176,7 @@ class WebSocketsClient {
             }
         }
 
-        if ($this->useE2Eencryption === true)
-        {
+        if ($this->useE2Eencryption === true) {
             $nonce = random_bytes(SODIUM_CRYPTO_SECRETBOX_NONCEBYTES);
             $ciphertext = sodium_crypto_secretbox($data, $nonce, base64_decode($_ENV['CODEINSIGHTS_MESSAGING_SERVER_ENCRYPTION_KEY_BASE64_ENCODED']));
 
@@ -194,9 +188,7 @@ class WebSocketsClient {
             if ($compress === true) {
                 $data['compressed'] = true;
             }
-        }
-        elseif ($compress === true)
-        {
+        } elseif ($compress === true) {
             $data = [
                 'message' => $data,
                 'compressed' => true,
@@ -214,20 +206,19 @@ class WebSocketsClient {
         $this->connection->send($dataToSend);
     }
 
-    public function doNotRespond() : array
+    public function doNotRespond(): array
     {
         return [];
     }
 
-    public function performMaintenance() : void
+    public function performMaintenance(): void
     {
-        if ($this->isConnectedToServer)
-        {
+        if ($this->isConnectedToServer) {
             $this->agent->performMaintenance();
         }
     }
 
-    public function registerCallback($command, $handler) : void
+    public function registerCallback($command, $handler): void
     {
         $this->commandHandlers[$command] = $handler;
     }
