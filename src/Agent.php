@@ -10,9 +10,13 @@ class Agent
     private array $activeClients = [];
     private array $processTimestamps = [];
 
+    private string $extensionConfigDir;
+
     public function __construct(
         private WebSocketsClient $webSocketsClient,
     ) {
+        $this->_determineExtensionConfigDir();
+
         $this->webSocketsClient->registerCallback('client-set-breakpoint', 'handleSetBreakpoint');
         $this->webSocketsClient->registerCallback('client-remove-breakpoint', 'handleRemoveBreakpoint');
         $this->webSocketsClient->registerCallback('client-keepalive', 'handleClientKeepalive');
@@ -133,7 +137,8 @@ class Agent
 
         // d('Sending logs');
 
-        $logPath = dirname(ini_get('codeinsights.breakpoint_file')) . '/logs/';
+        // TODO: Create "logs" folder automatically if it does not exist
+        $logPath = $this->extensionConfigDir . 'logs/';
         $logs = scandir($logPath, SCANDIR_SORT_ASCENDING);
 
         foreach ($logs as $logFilename) {
@@ -201,14 +206,28 @@ class Agent
         $debuggerCallback = '\\CodeInsights\\Debugger\\Helper::debug(\'\', \'\', get_defined_vars(), debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS), __FILE__, __LINE__);';
         $breakpointsConfiguration = '';
 
+        // TODO: Add support for conditional breakpoints
+        $condition = '1';
+
         foreach ($this->breakpoints as $filePath => $listOfBreakpoints) {
             foreach (array_keys($listOfBreakpoints) as $breakpoint) {
-                $breakpointsConfiguration .= $_ENV['CODEINSIGHTS_PROJECT_WEBROOT'] . $filePath . "\n" . $breakpoint . "\n" . $debuggerCallback . "\n";
+                $breakpointsConfiguration .= $_ENV['CODEINSIGHTS_PROJECT_WEBROOT'] . $filePath . "\n" . $breakpoint . "\n" . $condition . "\n" . $debuggerCallback . "\n";
             }
         }
 
         $breakpointsConfiguration = rtrim($breakpointsConfiguration, "\n");
 
-        file_put_contents(ini_get('codeinsights.breakpoint_file'), $breakpointsConfiguration, LOCK_EX);
+        file_put_contents($this->extensionConfigDir . 'breakpoints.txt', $breakpointsConfiguration, LOCK_EX);
+    }
+
+    private function _determineExtensionConfigDir(): void {
+        $extensionConfigurationPath = ini_get('codeinsights.directory');
+
+        if (substr($extensionConfigurationPath, -1) !== DIRECTORY_SEPARATOR)
+        {
+            $extensionConfigurationPath .= DIRECTORY_SEPARATOR;
+        }
+
+        $this->extensionConfigDir = $extensionConfigurationPath;
     }
 }
