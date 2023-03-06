@@ -204,14 +204,25 @@ class Agent
     private function saveBreakpointsInConfigurationFile(): void
     {
         $debuggerCallback = '\\CodeInsights\\Debugger\\Helper::debug(\'\', \'\', get_defined_vars(), debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS), __FILE__, __LINE__);';
-        $breakpointsConfiguration = '';
+        $breakpointsConfiguration = 'version=1' . "\n\n";
 
         // TODO: Add support for conditional breakpoints
-        $condition = '1';
+        $breakpointCondition = '1';
+
+        // Placeholder for future functionality
+        // E.g. capability to add timers and counters instead of logpoints
+        $breakpointType = 'bp_type';
+
+        $breakpointId = 0;
 
         foreach ($this->breakpoints as $filePath => $listOfBreakpoints) {
             foreach (array_keys($listOfBreakpoints) as $breakpoint) {
-                $breakpointsConfiguration .= $_ENV['CODEINSIGHTS_PROJECT_WEBROOT'] . $filePath . "\n" . $breakpoint . "\n" . $condition . "\n" . $debuggerCallback . "\n";
+                // Currently extension expects id to be a numeric value
+                // $breakpointId = uniqid('', true);
+
+                $breakpointsConfiguration .= 'id=' . $breakpointId . "\n" . $breakpointType . "\n" . $_ENV['CODEINSIGHTS_PROJECT_WEBROOT'] . $filePath . "\n" . $breakpoint . "\n" . $breakpointCondition . "\n" . $debuggerCallback . "\n\n";
+
+                $breakpointId++;
             }
         }
 
