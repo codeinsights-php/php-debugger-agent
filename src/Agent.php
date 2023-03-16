@@ -11,6 +11,7 @@ class Agent
     private array $processTimestamps = [];
 
     private string $extensionConfigDir;
+    public string $projectWebroot;
 
     public function __construct(
         private WebSocketsClient $webSocketsClient,
@@ -31,10 +32,10 @@ class Agent
 
         $this->markClientAsActive($request->clientId);
 
-        $filePath = $_ENV['CODEINSIGHTS_PROJECT_WEBROOT'] . $request->filePath;
+        $filePath = $this->projectWebroot . $request->filePath;
 
         // Validate that breakpoints are not being set outside the webroot
-        if (str_starts_with(realpath($filePath), $_ENV['CODEINSIGHTS_PROJECT_WEBROOT']) === false) {
+        if (str_starts_with(realpath($filePath), $this->projectWebroot) === false) {
             return $this->webSocketsClient->prepareResponse('client-set-breakpoint-response', (array) $request + [
                 'error' => true,
                 'errorMessage' => 'Invalid file path provided.',
@@ -62,10 +63,12 @@ class Agent
         }
 
         if (
-            isset($this->breakpoints[$request->filePath][$request->lineNo]) === false
-            || in_array($request->clientId, $this->breakpoints[$request->filePath][$request->lineNo]) === false
+            isset($this->breakpoints[$filePath][$request->lineNo]) === false
+            // Check if this specific client hasn't already added this breakpoint
+            || in_array($request->clientId, $this->breakpoints[$filePath][$request->lineNo]) === false
         ) {
-            $this->breakpoints[$request->filePath][$request->lineNo][] = $request->clientId;
+            // Note the breakpoint and the client interested in this specific breakpoint
+            $this->breakpoints[$filePath][$request->lineNo][] = $request->clientId;
         }
 
         $this->saveBreakpointsInConfigurationFile();
@@ -220,7 +223,7 @@ class Agent
                 // Currently extension expects id to be a numeric value
                 // $breakpointId = uniqid('', true);
 
-                $breakpointsConfiguration .= 'id=' . $breakpointId . "\n" . $breakpointType . "\n" . $_ENV['CODEINSIGHTS_PROJECT_WEBROOT'] . $filePath . "\n" . $breakpoint . "\n" . $breakpointCondition . "\n" . $debuggerCallback . "\n\n";
+                $breakpointsConfiguration .= 'id=' . $breakpointId . "\n" . $breakpointType . "\n" . $filePath . "\n" . $breakpoint . "\n" . $breakpointCondition . "\n" . $debuggerCallback . "\n\n";
 
                 $breakpointId++;
             }

@@ -88,6 +88,9 @@ class WebSocketsClient
     {
         // TODO: Add some verbose logging here
         $apiEndpoint = $_ENV['API_ENDPOINT'] . 'authenticate-connection/';
+
+        d('Requesting authentication signature from ' . $apiEndpoint);
+
         $data = [
             'api_key_id' => $_ENV['API_KEY_ID'],
             'channel_name' => $this->channelName,
@@ -121,11 +124,21 @@ class WebSocketsClient
 
         $response = json_decode($result);
 
-        if ($response === false && isset($response->auth) !== true) {
+        if ($response === false || isset($response->auth) !== true) {
             d('Invalid API response when retrieving authentication signature.');
             sleep(30);
             die();
         }
+
+        if (isset($response->webroot) === false || empty($response->webroot) === true) {
+            d('Webroot not specified. Incomplete configuration. Please complete the API key confiugration in the web administration panel.');
+            sleep(30);
+            die();
+        }
+
+        d('Registering project webroot: ' . $response->webroot);
+
+        $this->agent->projectWebroot = $response->webroot;
 
         $authentication_signature = $response->auth;
 
