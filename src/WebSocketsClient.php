@@ -23,6 +23,14 @@ class WebSocketsClient
             d('E2E encryption enabled.');
         }
 
+        if ($this->useE2Eencryption === true && empty($_ENV['CODEINSIGHTS_MESSAGING_SERVER_ENCRYPTION_KEY_BASE64_ENCODED']) === true) {
+            dd('Incomplete configuration, .env has end-to-end encryption enabled, but no encryption key has been provided.');
+        }
+
+        if ($this->useE2Eencryption === true && strlen(base64_decode($_ENV['CODEINSIGHTS_MESSAGING_SERVER_ENCRYPTION_KEY_BASE64_ENCODED'])) !== SODIUM_CRYPTO_SECRETBOX_KEYBYTES) {
+            dd('Incomplete configuration, .env has end-to-end encryption enabled, but encryption key has incorrect length.');
+        }
+
         $this->channelName = 'private-' . ($this->useE2Eencryption === true ? 'encrypted-' : '') . $_ENV['API_KEY_ID'] . '-' . $_ENV['API_KEY_ACCESS_TOKEN'];
     }
 
@@ -39,6 +47,7 @@ class WebSocketsClient
             $nonce = base64_decode($message->data->nonce);
             $encryptedMessage = base64_decode($message->data->ciphertext);
 
+            // TODO: Verify that decoding was successful, notify about potentially incorrect encryption key
             $decryptedMessage = sodium_crypto_secretbox_open($encryptedMessage, $nonce, $encryptionKey);
 
             $message->data = json_decode($decryptedMessage);
@@ -117,23 +126,17 @@ class WebSocketsClient
         $result = file_get_contents($apiEndpoint, false, $context);
 
         if ($result === false) {
-            d('Error retrieving authentication signature.');
-            sleep(30);
-            die();
+            dd('Error retrieving authentication signature.');
         }
 
         $response = json_decode($result);
 
         if ($response === false || isset($response->auth) !== true) {
-            d('Invalid API response when retrieving authentication signature.');
-            sleep(30);
-            die();
+            dd('Invalid API response when retrieving authentication signature.');
         }
 
         if (isset($response->webroot) === false || empty($response->webroot) === true) {
-            d('Webroot not specified. Incomplete configuration. Please complete the API key confiugration in the web administration panel.');
-            sleep(30);
-            die();
+            dd('Webroot not specified. Incomplete configuration. Please complete the API key confiugration in the web administration panel.');
         }
 
         d('Registering project webroot: ' . $response->webroot);
@@ -235,9 +238,4 @@ class WebSocketsClient
     {
         $this->commandHandlers[$command] = $handler;
     }
-}
-
-function d(mixed $variable = '')
-{
-    echo $variable . "\n";
 }

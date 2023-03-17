@@ -17,6 +17,7 @@ class Agent
         private WebSocketsClient $webSocketsClient,
     ) {
         $this->_determineExtensionConfigDir();
+        $this->_verifyExtensionConfigDir();
 
         $this->webSocketsClient->registerCallback('client-set-breakpoint', 'handleSetBreakpoint');
         $this->webSocketsClient->registerCallback('client-remove-breakpoint', 'handleRemoveBreakpoint');
@@ -229,11 +230,15 @@ class Agent
             }
         }
 
-        file_put_contents($this->extensionConfigDir . 'breakpoints.txt', $breakpointsConfiguration, LOCK_EX);
+        file_put_contents($this->extensionConfigDir . ini_get('codeinsights.breakpoint_file'), $breakpointsConfiguration, LOCK_EX);
     }
 
     private function _determineExtensionConfigDir(): void {
         $extensionConfigurationPath = ini_get('codeinsights.directory');
+
+        if (empty($extensionConfigurationPath)) {
+            dd('Extension hasn\'t been installed or is incorrectly configured. Missing "codeinsights.directory" php.ini configuration directive showing where to look for breakpoints and debug dumps.');
+        }
 
         if (substr($extensionConfigurationPath, -1) !== DIRECTORY_SEPARATOR)
         {
@@ -241,5 +246,23 @@ class Agent
         }
 
         $this->extensionConfigDir = $extensionConfigurationPath;
+    }
+
+    private function _verifyExtensionConfigDir(): void {
+        if (file_exists($this->extensionConfigDir . 'logs/') === false) {
+            dd('Extension hasn\'t been installed or is incorrectly configured. Logs folder for debug dumps does not exist.');
+        }
+
+        if (is_writable($this->extensionConfigDir . 'logs/') === false) {
+            dd('Extension hasn\'t been installed or is incorrectly configured. Logs folder for debug dumps is not writable.');
+        }
+
+        $breakpointsConfigurationFile = $this->extensionConfigDir . ini_get('codeinsights.breakpoint_file');
+
+        if (is_writable($breakpointsConfigurationFile) === false) {
+            if (touch($breakpointsConfigurationFile) !== true) {
+                dd('Extension hasn\'t been installed or is incorrectly configured. Breakpoints configuration file is not writable.');
+            }
+        }
     }
 }

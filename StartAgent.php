@@ -2,11 +2,28 @@
 
 require __DIR__ . '/vendor/autoload.php';
 
+// Helper functions / "loggers"
+function d(mixed $variable = '')
+{
+    echo $variable . "\n";
+}
+
+function dd(mixed $variable = '')
+{
+    d($variable);
+    sleep(30);
+    die();
+}
+
 // Load configuration and secrets from .env file
 $dotenv = Dotenv\Dotenv::createMutable(__DIR__);
 $dotenv->load();
 
 $webSocketsClient = new \CodeInsights\Debugger\Agent\WebSocketsClient();
+
+if (empty($_ENV['CODEINSIGHTS_MESSAGING_SERVER_HOST']) || empty($_ENV['CODEINSIGHTS_MESSAGING_SERVER_KEY'])) {
+    dd('Incomplete configuration, .env does not contain websockets messaging server host and/or key.');
+}
 
 $loop = \React\EventLoop\Loop::get();
 
