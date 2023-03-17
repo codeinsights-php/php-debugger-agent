@@ -207,7 +207,7 @@ class Agent
     private function saveBreakpointsInConfigurationFile(): void
     {
         $debuggerCallback = '\\CodeInsights\\Debugger\\Helper::debug(\'\', \'\', get_defined_vars(), debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS), __FILE__, __LINE__);';
-        $breakpointsConfiguration = 'version=1' . "\n\n";
+        $breakpointsConfiguration = 'version=1' . "\n";
 
         // TODO: Add support for conditional breakpoints
         $breakpointCondition = '1';
@@ -223,13 +223,11 @@ class Agent
                 // Currently extension expects id to be a numeric value
                 // $breakpointId = uniqid('', true);
 
-                $breakpointsConfiguration .= 'id=' . $breakpointId . "\n" . $breakpointType . "\n" . $filePath . "\n" . $breakpoint . "\n" . $breakpointCondition . "\n" . $debuggerCallback . "\n\n";
+                $breakpointsConfiguration .= "\n" . 'id=' . $breakpointId . "\n" . $breakpointType . "\n" . $filePath . "\n" . $breakpoint . "\n" . $breakpointCondition . "\n" . $debuggerCallback . "\n";
 
                 $breakpointId++;
             }
         }
-
-        $breakpointsConfiguration = rtrim($breakpointsConfiguration, "\n");
 
         file_put_contents($this->extensionConfigDir . 'breakpoints.txt', $breakpointsConfiguration, LOCK_EX);
     }
