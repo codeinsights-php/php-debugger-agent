@@ -230,14 +230,14 @@ class Agent
             }
         }
 
-        file_put_contents($this->extensionConfigDir . ini_get('codeinsights.breakpoint_file'), $breakpointsConfiguration, LOCK_EX);
+        file_put_contents($this->extensionConfigDir . 'breakpoints.txt', $breakpointsConfiguration, LOCK_EX);
     }
 
     private function _determineExtensionConfigDir(): void {
-        $extensionConfigurationPath = ini_get('codeinsights.directory');
+        $extensionConfigurationPath = $_ENV['CODEINSIGHTS_DIRECTORY'];
 
         if (empty($extensionConfigurationPath)) {
-            dd('Extension hasn\'t been installed or is incorrectly configured. Missing "codeinsights.directory" php.ini configuration directive showing where to look for breakpoints and debug dumps.');
+            dd('Extension hasn\'t been installed or is incorrectly configured. Missing "CODEINSIGHTS_DIRECTORY" environemnt variable showing where to look for breakpoints and debug dumps.');
         }
 
         if (substr($extensionConfigurationPath, -1) !== DIRECTORY_SEPARATOR)
@@ -250,14 +250,15 @@ class Agent
 
     private function _verifyExtensionConfigDir(): void {
         if (file_exists($this->extensionConfigDir . 'logs/') === false) {
-            dd('Extension hasn\'t been installed or is incorrectly configured. Logs folder for debug dumps does not exist.');
+            d('Extension hasn\'t been installed or is incorrectly configured. Logs folder for debug dumps does not exist.');
+            mkdir($this->extensionConfigDir . 'logs/', 0777, true);
         }
 
         if (is_writable($this->extensionConfigDir . 'logs/') === false) {
             dd('Extension hasn\'t been installed or is incorrectly configured. Logs folder for debug dumps is not writable.');
         }
 
-        $breakpointsConfigurationFile = $this->extensionConfigDir . ini_get('codeinsights.breakpoint_file');
+        $breakpointsConfigurationFile = $this->extensionConfigDir . 'breakpoints.txt';
 
         if (is_writable($breakpointsConfigurationFile) === false) {
             if (touch($breakpointsConfigurationFile) !== true) {
