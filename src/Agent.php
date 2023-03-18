@@ -37,6 +37,9 @@ class Agent
 
         $this->markClientAsActive($request->clientId);
 
+        d('Request file path:' . $request->filePath);
+
+
         $filePath = $this->projectWebroot . $request->filePath;
 
         d('Relfilepath:' . realpath($filePath));
