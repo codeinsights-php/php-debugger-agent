@@ -16,6 +16,10 @@ class Agent
     public function __construct(
         private WebSocketsClient $webSocketsClient,
     ) {
+        $this->projectWebroot = '/app/';
+
+        d('Project webroot: ' . $this->projectWebroot);
+
         $this->_determineExtensionConfigDir();
         $this->_verifyExtensionConfigDir();
 
@@ -35,8 +39,12 @@ class Agent
 
         $filePath = $this->projectWebroot . $request->filePath;
 
+        d('Relfilepath:' . realpath($filePath));
+        d('projectWebroot:' . $this->projectWebroot);
+
         // Validate that breakpoints are not being set outside the webroot
         if (str_starts_with(realpath($filePath), $this->projectWebroot) === false) {
+
             return $this->webSocketsClient->prepareResponse('client-set-breakpoint-response', (array) $request + [
                 'error' => true,
                 'errorMessage' => 'Invalid file path provided.',
