@@ -50,6 +50,14 @@ class WebSocketsClient
             // TODO: Verify that decoding was successful, notify about potentially incorrect encryption key
             $decryptedMessage = sodium_crypto_secretbox_open($encryptedMessage, $nonce, $encryptionKey);
 
+            if ($decryptedMessage === false)
+            {
+                d('Could not decrypt message. Please verify if the same encryption key is used by client (IDE) and Agent.');
+
+                // TODO: Use simultaneously also subscription to an unencrypted channel and Send this message there?
+                return $this->prepareResponse('client-agent-encountered-error', ['errorCode' => 'MESSAGE_DECRYPTION_FAILED'], $forceSendingWithoutEncryption = true);
+            }
+
             $message->data = json_decode($decryptedMessage);
 
             d('Decrypted payload:');
@@ -154,9 +162,9 @@ class WebSocketsClient
         ];
     }
 
-    public function prepareResponse($event, array $response): array
+    public function prepareResponse($event, array $response, bool $forceSendingWithoutEncryption = false): array
     {
-        if ($this->useE2Eencryption === true) {
+        if ($this->useE2Eencryption === true && $forceSendingWithoutEncryption !== true) {
             // TODO: Add logger
             d('Message to be sent (before encryption)');
             print_r($response);
