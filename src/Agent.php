@@ -249,19 +249,21 @@ class Agent
     }
 
     private function _verifyExtensionConfigDir(): void {
-        if (file_exists($this->extensionConfigDir . 'logs/') === false) {
-            dd('Extension hasn\'t been installed or is incorrectly configured. Logs folder for debug dumps does not exist.');
+        $logsFolder = $this->extensionConfigDir . 'logs/';
+
+        if (file_exists($logsFolder) === false) {
+            dd('Extension hasn\'t been installed or is incorrectly configured. Logs folder "' . $logsFolder . '" for debug dumps does not exist.');
         }
 
-        if (is_writable($this->extensionConfigDir . 'logs/') === false) {
-            dd('Extension hasn\'t been installed or is incorrectly configured. Logs folder for debug dumps is not writable.');
+        if (is_writable($logsFolder) === false) {
+            dd('Extension hasn\'t been installed or is incorrectly configured. Logs folder "' . $logsFolder . '" for debug dumps is not writable.');
         }
 
         $breakpointsConfigurationFile = $this->extensionConfigDir . ini_get('codeinsights.breakpoint_file');
 
         if (is_writable($breakpointsConfigurationFile) === false) {
             if (touch($breakpointsConfigurationFile) !== true) {
-                dd('Extension hasn\'t been installed or is incorrectly configured. Breakpoints configuration file is not writable.');
+                dd('Extension hasn\'t been installed or is incorrectly configured. Breakpoints configuration file "' . $breakpointsConfigurationFile . '" is not writable.');
             }
         }
     }
