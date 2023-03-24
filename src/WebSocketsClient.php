@@ -139,6 +139,12 @@ class WebSocketsClient
 
         $response = json_decode($result);
 
+        // Check for API errors noting that project encryption don't match Agent's configuration
+        if (isset($response->error) === true && $response->error === true)
+        {
+            dd('An error occured while trying to retrieve authentication signature:' . "\n" . $response->errorMessage);
+        }
+
         if ($response === false || isset($response->auth) !== true) {
             dd('Invalid API response when retrieving authentication signature.');
         }
