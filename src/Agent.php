@@ -63,14 +63,8 @@ class Agent
             ]);
         }
 
-        if (
-            isset($this->breakpoints[$filePath][$request->lineNo]) === false
-            // Check if this specific client hasn't already added this breakpoint
-            || in_array($request->clientId, $this->breakpoints[$filePath][$request->lineNo]) === false
-        ) {
-            // Note the breakpoint and the client interested in this specific breakpoint
-            $this->breakpoints[$filePath][$request->lineNo][] = $request->clientId;
-        }
+        // TODO: Inform the user if the breakpoint wasn't added
+        $this->addBreakpoint((array) $request + ['absoluteFilePath' => $filePath]);
 
         $this->saveBreakpointsInConfigurationFile();
 
@@ -83,7 +77,7 @@ class Agent
     {
         $this->markClientAsActive($request->clientId);
 
-        $this->removeBreakpoint($request->filePath, $request->lineNo, $request->clientId);
+        $this->removeBreakpoint($request);
 
         $this->saveBreakpointsInConfigurationFile();
 
@@ -175,34 +169,55 @@ class Agent
 
     private function removeBreakpointSetByClient($clientId): void
     {
-        foreach ($this->breakpoints as $filePath => $lines) {
-            foreach ($lines as $lineNo => $clients) {
-                $this->removeBreakpoint($filePath, $lineNo, $clientId);
+        foreach ($this->breakpoints as $breakpointId => $breakpoint) {
+            if ($breakpoint['clientId'] == $clientId) {
+                unset($this->breakpoints[$breakpointId]);
             }
         }
 
         $this->saveBreakpointsInConfigurationFile();
     }
 
-    private function removeBreakpoint($filePath, $lineNo, $clientId): void
+    private function removeBreakpoint(stdClass $breakpointToRemove): bool
     {
-        if (isset($this->breakpoints[$filePath][$lineNo]) === false) {
-            return;
-        }
-
-        foreach ($this->breakpoints[$filePath][$lineNo] as $array_key => $client) {
-            if ($client === $clientId) {
-                unset($this->breakpoints[$filePath][$lineNo][$array_key]);
-
-                if (empty($this->breakpoints[$filePath][$lineNo])) {
-                    unset($this->breakpoints[$filePath][$lineNo]);
-                }
-
-                if (empty($this->breakpoints[$filePath])) {
-                    unset($this->breakpoints[$filePath]);
-                }
+        foreach ($this->breakpoints as $breakpointId => $breakpoint) {
+            if (
+                $breakpoint['filePath'] == $breakpointToRemove->filePath &&
+                $breakpoint['lineNo'] == $breakpointToRemove->lineNo &&
+                $breakpoint['id'] == $breakpointToRemove->id
+            ) {
+                unset($this->breakpoints[$breakpointId]);
+                return true;
             }
         }
+
+        return false;
+    }
+
+    private function addBreakpoint(array $breakpointToAdd): bool {
+        // Check if the breakpoint hasn't been already added
+        // TODO: Check breakpoint uniqueness also based on the type, condition and variable to dump
+        foreach ($this->breakpoints as $breakpoint) {
+            if (
+                $breakpoint['filePath'] == $breakpointToAdd['filePath'] &&
+                $breakpoint['lineNo'] == $breakpointToAdd['lineNo'] &&
+                // TODO: Allow setting multiple equal breakpoints only for the public demo?
+                $breakpoint['clientId'] == $breakpointToAdd['clientId']
+            ) {
+                return false;
+            }
+        }
+
+        // TODO: Add support for conditional breakpoints
+        $breakpointToAdd['condition'] = '1';
+
+        // Placeholder for future functionality
+        // E.g. capability to add timers and counters instead of logpoints
+        $breakpointToAdd['type'] = 'bp_type';
+
+        $this->breakpoints[] = $breakpointToAdd;
+
+        return true;
     }
 
     private function saveBreakpointsInConfigurationFile(): void
@@ -210,24 +225,14 @@ class Agent
         $debuggerCallback = '\\CodeInsights\\Debugger\\Helper::debug(\'\', \'\', get_defined_vars(), debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS), __FILE__, __LINE__);';
         $breakpointsConfiguration = 'version=1' . "\n";
 
-        // TODO: Add support for conditional breakpoints
-        $breakpointCondition = '1';
-
-        // Placeholder for future functionality
-        // E.g. capability to add timers and counters instead of logpoints
-        $breakpointType = 'bp_type';
-
-        $breakpointId = 0;
-
-        foreach ($this->breakpoints as $filePath => $listOfBreakpoints) {
-            foreach (array_keys($listOfBreakpoints) as $breakpoint) {
-                // Currently extension expects id to be a numeric value
-                // $breakpointId = uniqid('', true);
-
-                $breakpointsConfiguration .= "\n" . 'id=' . $breakpointId . "\n" . $breakpointType . "\n" . $filePath . "\n" . $breakpoint . "\n" . $breakpointCondition . "\n" . $debuggerCallback . "\n";
-
-                $breakpointId++;
-            }
+        foreach ($this->breakpoints as $breakpoint) {
+            $breakpointsConfiguration .= "\n";
+            $breakpointsConfiguration .= 'id=' . $breakpoint['id'] . "\n";
+            $breakpointsConfiguration .= $breakpoint['type'] . "\n";
+            $breakpointsConfiguration .= $breakpoint['absoluteFilePath'] . "\n";
+            $breakpointsConfiguration .= $breakpoint['lineNo'] . "\n";
+            $breakpointsConfiguration .= $breakpoint['condition'] . "\n";
+            $breakpointsConfiguration .= $debuggerCallback . "\n";
         }
 
         file_put_contents($this->extensionConfigDir . ini_get('codeinsights.breakpoint_file'), $breakpointsConfiguration, LOCK_EX);
