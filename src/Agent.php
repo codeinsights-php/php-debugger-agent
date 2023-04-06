@@ -77,9 +77,7 @@ class Agent
     {
         $this->markClientAsActive($request->clientId);
 
-        $this->removeBreakpoint($request);
-
-        $this->saveBreakpointsInConfigurationFile();
+        $this->removeBreakpoint($request->id);
 
         return $this->webSocketsClient->prepareResponse('client-remove-breakpoint-response', (array) $request + [
             'error' => false,
@@ -146,7 +144,19 @@ class Agent
 
             $logFile = $logPath . $logFilename;
 
-            $this->webSocketsClient->sendMessage('client-debugging-event', file_get_contents($logFile), compress: true);
+            if (substr($logFilename, -8) == '.message') {
+                $messageRaw = file_get_contents($logFile);
+                $message = json_decode($messageRaw);
+
+                if ($message->type == 'error-when-evaluating-breakpoint') {
+                    $this->removeBreakpoint($message->breakpoint_id);
+                }
+
+                $this->webSocketsClient->sendMessage('client-debugging-event-' . $message->type, $messageRaw);
+            }
+            else {
+                $this->webSocketsClient->sendMessage('client-debugging-event', file_get_contents($logFile), compress: true);
+            }
 
             unlink($logFile);
         }
@@ -178,15 +188,12 @@ class Agent
         $this->saveBreakpointsInConfigurationFile();
     }
 
-    private function removeBreakpoint(stdClass $breakpointToRemove): bool
+    private function removeBreakpoint($breakpointToRemove_id): bool
     {
         foreach ($this->breakpoints as $breakpointId => $breakpoint) {
-            if (
-                $breakpoint['filePath'] == $breakpointToRemove->filePath &&
-                $breakpoint['lineNo'] == $breakpointToRemove->lineNo &&
-                $breakpoint['id'] == $breakpointToRemove->id
-            ) {
+            if ($breakpoint['id'] == $breakpointToRemove_id) {
                 unset($this->breakpoints[$breakpointId]);
+                $this->saveBreakpointsInConfigurationFile();
                 return true;
             }
         }
@@ -213,7 +220,7 @@ class Agent
 
         // Placeholder for future functionality
         // E.g. capability to add timers and counters instead of logpoints
-        $breakpointToAdd['type'] = 'bp_type';
+        $breakpointToAdd['type'] = 'debug_helper';
 
         $this->breakpoints[] = $breakpointToAdd;
 
