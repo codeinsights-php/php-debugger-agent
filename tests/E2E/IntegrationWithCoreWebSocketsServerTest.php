@@ -4,6 +4,8 @@ use Tests\WebSocketsClient;
 
 beforeAll(function () {
    // echo 'Info that Agent and WebSockets server have to be running for these tests.' . "\n";
+   // And the API key has to be associated with the Laravel sample project in the Core / WebSockets server
+   // And the Laravel sample project has to have debugger Helper library included
 });
 
 beforeEach(function () {
@@ -39,6 +41,7 @@ it('adds logpoints', function () {
       'event' => 'logpoint-add',
       'data' => [
          'file_path' => $file_path,
+         // TODO: Read hash dynamically
          'file_hash' => '489ffad6',
          'line_number' => 18,
       ],
@@ -46,14 +49,12 @@ it('adds logpoints', function () {
 
    // Read data from confirmation that logpoint is propagated across servers
    $message = json_decode($this->webSocketsClientUser->receiveMessage(), true);
-
    $logpoint_id = $message['data']['logpoint_id'];
-   $project_id = $message['data']['project_id'];
 
    // Wait for the confirmation from the Agent
    $message = $this->webSocketsClientUser->receiveMessage();
 
-   expect($message)->toBe('{"event":"logpoint-added","data":{"logpoint_id":"' . $logpoint_id . '","project_id":' . $project_id . '}}');
+   expect($message)->toBe('{"event":"logpoint-added","data":{"logpoint_id":"' . $logpoint_id . '"}}');
 
    // Verify that Agent wrote the configuration file
    $logpointsConfiguration = file_get_contents(ini_get('codeinsights.directory') . ini_get('codeinsights.breakpoint_file'));
@@ -110,6 +111,15 @@ it('removes logpoints', function () {
          'logpoint_id' => $logpoint_id,
          'removal_reason_code' => 101,
          'removal_reason_message' => 'Logpoint removed by a user',
+      ],
+   ]);
+
+   $message = json_decode($this->webSocketsClientUser->receiveMessage(), true);
+
+   expect($message)->toMatchArray([
+      'event' => 'logpoint-removed',
+      'data' => [
+         'logpoint_id' => $logpoint_id,
       ],
    ]);
 
