@@ -6,8 +6,14 @@
     "autoload": {
         "psr-4": {"CodeInsights\\Debugger\\Agent\\": "src/"}
     },
+    "autoload-dev": {
+        "psr-4": {
+            "Tests\\": "tests/"
+        }
+    },
     "require-dev": {
-        "pestphp/pest": "^2.6"
+        "pestphp/pest": "^2.6",
+        "textalk/websocket": "^1.6"
     },
     "config": {
         "allow-plugins": {

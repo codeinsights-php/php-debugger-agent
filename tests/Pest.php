@@ -11,7 +11,7 @@
 |
 */
 
-// uses(Tests\TestCase::class)->in('Feature');
+uses(Tests\TestCase::class)->in('Feature');
 
 /*
 |--------------------------------------------------------------------------
@@ -43,3 +43,6 @@ function something()
 {
     // ..
 }
+
+$dotenv = Dotenv\Dotenv::createMutable(__DIR__ . '/../');
+$dotenv->load();
