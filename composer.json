@@ -5,5 +5,13 @@
     },
     "autoload": {
         "psr-4": {"CodeInsights\\Debugger\\Agent\\": "src/"}
+    },
+    "require-dev": {
+        "pestphp/pest": "^2.6"
+    },
+    "config": {
+        "allow-plugins": {
+            "pestphp/pest-plugin": true
+        }
     }
 }

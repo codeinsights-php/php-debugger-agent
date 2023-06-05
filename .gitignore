@@ -2,3 +2,4 @@
 vendor/
 breakpoints.txt
 tmp/
+composer.phar
