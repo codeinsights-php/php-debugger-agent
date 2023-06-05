@@ -21,8 +21,8 @@ $dotenv->load();
 
 $webSocketsClient = new \CodeInsights\Debugger\Agent\WebSocketsClient();
 
-if (empty($_ENV['CODEINSIGHTS_MESSAGING_SERVER_HOST']) || empty($_ENV['CODEINSIGHTS_MESSAGING_SERVER_KEY'])) {
-    dd('Incomplete configuration, .env does not contain websockets messaging server host and/or key.');
+if (empty($_ENV['CODEINSIGHTS_MESSAGING_SERVER_ENDPOINT'])) {
+    dd('Incomplete configuration, .env does not contain websockets messaging server endpoint.');
 }
 
 $loop = \React\EventLoop\Loop::get();
@@ -38,6 +38,14 @@ $connectionOptions = [
     'timeout' => 3,
 ];
 
+if (isset($_ENV['CODEINSIGHTS_MESSAGING_SERVER_SSL_VERIFY_PEER']) && $_ENV['CODEINSIGHTS_MESSAGING_SERVER_SSL_VERIFY_PEER'] === 'false')
+{
+    $connectionOptions['tls'] = [
+        'verify_peer' => false,
+        'verify_peer_name' => false,
+    ];
+}
+
 if (empty($_ENV['CODEINSIGHTS_MESSAGING_SERVER_USE_SPECIFIC_DNS_SERVER']) === false)
 {
     $connectionOptions['dns'] = $_ENV['CODEINSIGHTS_MESSAGING_SERVER_USE_SPECIFIC_DNS_SERVER'];
@@ -47,20 +55,18 @@ $reactConnector = new \React\Socket\Connector($loop, $connectionOptions);
 
 $connector = new \Ratchet\Client\Connector($loop, $reactConnector);
 
-$messagingServerEndpoint = 'wss://' . $_ENV['CODEINSIGHTS_MESSAGING_SERVER_HOST'] .'/app/' . $_ENV['CODEINSIGHTS_MESSAGING_SERVER_KEY'] . '?protocol=7&flash=false';
-
 // https://pusher.com/docs/channels/library_auth_reference/pusher-websockets-protocol/
-$connector($messagingServerEndpoint)->then(function ($connection) use ($webSocketsClient) {
+$connector($_ENV['CODEINSIGHTS_MESSAGING_SERVER_ENDPOINT'])->then(function ($connection) use ($webSocketsClient) {
     $webSocketsClient->connection = $connection;
 
     $connection->on('message', function ($msg) use ($connection, $webSocketsClient) {
         echo "Received: {$msg}\n";
 
-        $message = json_decode($msg, false);
+        $message = json_decode($msg, true);
 
-        if (is_string($message->data)) {
+        if (is_string($message['data'])) {
             // event "pusher:connection_established" has data as string which contains json
-            $message->data = json_decode($message->data, false);
+            $message['data'] = json_decode($message['data'], true);
         }
 
         print_r($message);

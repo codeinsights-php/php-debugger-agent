@@ -7,11 +7,9 @@ use stdClass;
 class Agent
 {
     private array $breakpoints = [];
-    private array $activeClients = [];
     private array $processTimestamps = [];
 
     private string $extensionConfigDir;
-    public string $projectWebroot;
 
     public function __construct(
         private WebSocketsClient $webSocketsClient,
@@ -19,76 +17,58 @@ class Agent
         $this->_determineExtensionConfigDir();
         $this->_verifyExtensionConfigDir();
 
-        $this->webSocketsClient->registerCallback('client-set-breakpoint', 'handleSetBreakpoint');
-        $this->webSocketsClient->registerCallback('client-remove-breakpoint', 'handleRemoveBreakpoint');
-        $this->webSocketsClient->registerCallback('client-keepalive', 'handleClientKeepalive');
-
         // Clear existing breakpoints from the configuration file upon startup
         $this->saveBreakpointsInConfigurationFile();
     }
 
-    public function handleSetBreakpoint(stdClass $request): array
+    public function handleLogpointAdd(array $request): array
     {
         d('Handling command setBreakpoint');
 
-        $this->markClientAsActive($request->clientId);
-
-        $filePath = $this->projectWebroot . $request->filePath;
-
-        // Validate that breakpoints are not being set outside the webroot
-        if (str_starts_with(realpath($filePath), $this->projectWebroot) === false) {
-            return $this->webSocketsClient->prepareResponse('client-set-breakpoint-response', (array) $request + [
-                'error' => true,
-                'errorMessage' => 'Invalid file path provided.',
-            ]);
-        }
-
-        if (file_exists($filePath) !== true) {
-            return $this->webSocketsClient->prepareResponse('client-set-breakpoint-response', (array) $request + [
+        if (file_exists($request['file_path']) !== true) {
+            return $this->webSocketsClient->prepareResponse('logpoint-add-error', $request + [
                 'error' => true,
                 'errorMessage' => 'File does not exist.',
             ]);
         }
 
-        $fileHash = hash('xxh32', file_get_contents($filePath));
+        $fileHash = hash('xxh32', file_get_contents($request['file_path']));
 
-        if ($request->fileHash !== $fileHash) {
-            return $this->webSocketsClient->prepareResponse('client-set-breakpoint-response', (array) $request + [
+        if ($request['file_hash'] !== $fileHash) {
+            return $this->webSocketsClient->prepareResponse('logpoint-add-error', $request + [
                 'error' => true,
                 'errorMessage' => 'PHP file contents in production environment differ. Please make sure you are using identical version ' .
                     'to the one in production environment when setting breakpoints.',
-
-                // TODO: Remove after debugging
-                'expectedFileHash' => $fileHash,
             ]);
         }
 
-        // TODO: Inform the user if the breakpoint wasn't added
-        $this->addBreakpoint((array) $request + ['absoluteFilePath' => $filePath]);
+        $this->addBreakpoint($request);
 
         $this->saveBreakpointsInConfigurationFile();
 
-        return $this->webSocketsClient->prepareResponse('client-set-breakpoint-response', (array) $request + [
-            'error' => false,
+        return $this->webSocketsClient->prepareResponse('logpoint-added', [
+            'logpoint_id' => $request['logpoint_id'],
+            'project_id' => $request['project_id'],
         ]);
     }
 
-    public function handleRemoveBreakpoint(stdClass $request): array
+    public function handleLogpointRemove(array $request): array
     {
-        $this->markClientAsActive($request->clientId);
+        // TODO: Verify if the logpoint actually exists
+        $projectId = $this->breakpoints[$request['logpoint_id']]['project_id'];
 
-        $this->removeBreakpoint($request->id);
+        // TODO: Validate if logpoint really was removed (if the logpoint really did exist)
+        $this->removeBreakpoint($request['logpoint_id']);
 
-        return $this->webSocketsClient->prepareResponse('client-remove-breakpoint-response', (array) $request + [
-            'error' => false,
+        return $this->webSocketsClient->prepareResponse('logpoint-removed', [
+            'logpoint_id' => $request['logpoint_id'],
+            'project_id' => $projectId,
         ]);
     }
 
-    public function handleClientKeepalive(stdClass $request): array
+    public function handleLogpointsList(array $request): array
     {
-        d('Handling client keepAlive');
-
-        $this->markClientAsActive($request->clientId);
+        $this->breakpoints = $request;
 
         return $this->webSocketsClient->doNotRespond();
     }
@@ -97,31 +77,7 @@ class Agent
     {
         // d('Performing maintenance');
 
-        $this->removeExpiredBreakpoints();
         $this->sendLogsToServer();
-    }
-
-    private function removeExpiredBreakpoints() : void
-    {
-        // TODO: Make time interval between process runs configurable
-        if ($this->alreadyRun('removing-expired-breakpoints', 10))
-        {
-            return;
-        }
-
-        // d('Removing expired breakpoints');
-
-        // TODO: Make configurable?
-        $clientTimeoutSeconds = 60;
-
-        // If haven't heard back from peers in a while, disable debugging (remove expired breakpoints)
-        foreach ($this->activeClients as $clientId => $lastSeen) {
-            if ($lastSeen < time() - $clientTimeoutSeconds) {
-                d($clientId . ' has been last seen more than ' . $clientTimeoutSeconds . ' seconds ago. Removing breakpoints set by this client.');
-                $this->removeBreakpointSetByClient($clientId);
-                unset($this->activeClients[$clientId]);
-            }
-        }
     }
 
     private function sendLogsToServer(): void
@@ -172,48 +128,21 @@ class Agent
         return true;
     }
 
-    private function markClientAsActive($clientId): void
-    {
-        $this->activeClients[$clientId] = time();
-    }
-
-    private function removeBreakpointSetByClient($clientId): void
-    {
-        foreach ($this->breakpoints as $breakpointId => $breakpoint) {
-            if ($breakpoint['clientId'] == $clientId) {
-                unset($this->breakpoints[$breakpointId]);
-            }
-        }
-
-        $this->saveBreakpointsInConfigurationFile();
-    }
-
     private function removeBreakpoint($breakpointToRemove_id): bool
     {
-        foreach ($this->breakpoints as $breakpointId => $breakpoint) {
-            if ($breakpoint['id'] == $breakpointToRemove_id) {
-                unset($this->breakpoints[$breakpointId]);
-                $this->saveBreakpointsInConfigurationFile();
-                return true;
-            }
+        if (isset($this->breakpoints[$breakpointToRemove_id]) === false)
+        {
+            return false;
         }
 
-        return false;
+        unset($this->breakpoints[$breakpointToRemove_id]);
+        $this->saveBreakpointsInConfigurationFile();
+
+        return true;
     }
 
-    private function addBreakpoint(array $breakpointToAdd): bool {
-        // Check if the breakpoint hasn't been already added
-        // TODO: Check breakpoint uniqueness also based on the type, condition and variable to dump
-        foreach ($this->breakpoints as $breakpoint) {
-            if (
-                $breakpoint['filePath'] == $breakpointToAdd['filePath'] &&
-                $breakpoint['lineNo'] == $breakpointToAdd['lineNo'] &&
-                // TODO: Allow setting multiple equal breakpoints only for the public demo?
-                $breakpoint['clientId'] == $breakpointToAdd['clientId']
-            ) {
-                return false;
-            }
-        }
+    private function addBreakpoint(array $breakpointToAdd): void {
+        // Should we check if the breakpoint hasn't been already added?
 
         // TODO: Add support for conditional breakpoints
         $breakpointToAdd['condition'] = '1';
@@ -222,9 +151,7 @@ class Agent
         // E.g. capability to add timers and counters instead of logpoints
         $breakpointToAdd['type'] = 'debug_helper';
 
-        $this->breakpoints[] = $breakpointToAdd;
-
-        return true;
+        $this->breakpoints[$breakpointToAdd['logpoint_id']] = $breakpointToAdd;
     }
 
     private function saveBreakpointsInConfigurationFile(): void
@@ -234,10 +161,10 @@ class Agent
 
         foreach ($this->breakpoints as $breakpoint) {
             $breakpointsConfiguration .= "\n";
-            $breakpointsConfiguration .= 'id=' . $breakpoint['id'] . "\n";
+            $breakpointsConfiguration .= 'id=' . $breakpoint['logpoint_id'] . "\n";
             $breakpointsConfiguration .= $breakpoint['type'] . "\n";
-            $breakpointsConfiguration .= $breakpoint['absoluteFilePath'] . "\n";
-            $breakpointsConfiguration .= $breakpoint['lineNo'] . "\n";
+            $breakpointsConfiguration .= $breakpoint['file_path'] . "\n";
+            $breakpointsConfiguration .= $breakpoint['line_number'] . "\n";
             $breakpointsConfiguration .= $breakpoint['condition'] . "\n";
             $breakpointsConfiguration .= $debuggerCallback . "\n";
         }

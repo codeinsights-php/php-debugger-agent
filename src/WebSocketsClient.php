@@ -8,7 +8,6 @@ use stdClass;
 class WebSocketsClient
 {
     private Agent $agent;
-    private array $commandHandlers;
     private bool $isConnectedToServer = false;
     private bool $useE2Eencryption;
     private string $channelName;
@@ -34,18 +33,18 @@ class WebSocketsClient
         $this->channelName = 'private-' . ($this->useE2Eencryption === true ? 'encrypted-' : '') . $_ENV['API_KEY_ID'] . '-' . $_ENV['API_KEY_ACCESS_TOKEN'];
     }
 
-    public function handleIncomingMessage(stdClass $message): array
+    public function handleIncomingMessage(array $message): array
     {
-        if (isset($message->event) === false) {
+        if (isset($message['event']) === false) {
             d('Invalid message received.');
             return $this->doNotRespond();
         }
 
         // Some messages (e.g. during authentication) are not encrypted
-        if (isset($message->data->ciphertext) && isset($message->data->nonce)) {
+        if (isset($message['data']['ciphertext']) && isset($message['data']['nonce'])) {
             $encryptionKey = base64_decode($_ENV['CODEINSIGHTS_MESSAGING_SERVER_ENCRYPTION_KEY_BASE64_ENCODED']);
-            $nonce = base64_decode($message->data->nonce);
-            $encryptedMessage = base64_decode($message->data->ciphertext);
+            $nonce = base64_decode($message['data']['nonce']);
+            $encryptedMessage = base64_decode($message['data']['ciphertext']);
 
             // TODO: Verify that decoding was successful, notify about potentially incorrect encryption key
             $decryptedMessage = sodium_crypto_secretbox_open($encryptedMessage, $nonce, $encryptionKey);
@@ -58,18 +57,29 @@ class WebSocketsClient
                 return $this->prepareResponse('client-agent-encountered-error', ['errorCode' => 'MESSAGE_DECRYPTION_FAILED'], $forceSendingWithoutEncryption = true);
             }
 
-            $message->data = json_decode($decryptedMessage);
+            $message['data'] = json_decode($decryptedMessage);
 
             d('Decrypted payload:');
-            print_r($message->data);
+            print_r($message['data']);
         }
 
-        switch ($message->event) {
-            case 'pusher:connection_established':
-                return $this->handleCommandConnectionEstablished($message->data);
-            case 'pusher_internal:subscription_succeeded':
-                $this->isConnectedToServer = true;
+        switch ($message['event']) {
+            case 'server:connection-established':
+                return $this->handleCommandConnectionEstablished($message['data']);
+
+            case 'server:authentication-result':
+
+                if ($message['data']['result'] === true)
+                {
+                    d('Connected successfully.');
+                    $this->isConnectedToServer = true;
+                    return ['event' => 'logpoints-list', 'data' => []];
+                }
+
+                // TODO: Handle rejections gracefully (do not reconnect)
+
                 return $this->doNotRespond();
+
             case 'pusher:error':
 
                 // stdClass Object
@@ -82,7 +92,7 @@ class WebSocketsClient
                 //         )
                 // )
 
-                if (isset($message->data->message) && strpos($message->data->message, 'The data content of this event exceeds the allowed maximum (10240 bytes)') !== false) {
+                if (isset($message['data']['message']) && strpos($message['data']['message'], 'The data content of this event exceeds the allowed maximum (10240 bytes)') !== false) {
                     return $this->prepareResponse('client-agent-encountered-error', ['errorCode' => 'DATA_CONTENT_LIMIT_EXCEEDED']);
                 }
 
@@ -91,81 +101,68 @@ class WebSocketsClient
                 return $this->doNotRespond();
 
             default:
-                if (isset($this->commandHandlers[$message->event])) {
-                    return $this->agent->{ $this->commandHandlers[$message->event] }($message->data);
+                $action = str_replace('-', ' ', $message['event']);
+                $action = ucwords($action);
+                $action = str_replace(' ', '', $action);
+                $action = 'handle' . $action;
+
+                if (method_exists($this->agent, $action))
+                {
+                    return $this->agent->$action((array) $message['data']);
                 } else {
-                    d('Unknown command received:' . $message->event);
+                    d('Unknown command received: ' . $message['event'] . ' (' . $action . ')');
                 }
         }
 
         return $this->doNotRespond();
     }
 
-    private function handleCommandConnectionEstablished(stdClass $request): array
+    private function handleCommandConnectionEstablished(array $request): array
     {
-        // TODO: Add some verbose logging here
-        $apiEndpoint = $_ENV['API_ENDPOINT'] . 'authenticate-connection/';
-
-        d('Requesting authentication signature from ' . $apiEndpoint);
-
-        $data = [
-            'api_key_id' => $_ENV['API_KEY_ID'],
-            'channel_name' => $this->channelName,
-            'socket_id' => $request->socket_id,
-        ];
-
-        // use key 'http' even if you send the request to https://...
-        $options = array(
-            'http' => array(
-                'header'  => "Content-type: application/x-www-form-urlencoded\r\n",
-                'method'  => 'POST',
-                'content' => http_build_query($data),
-            ),
-        );
-
-        if (isset($_ENV['ENVIRONMENT']) && $_ENV['ENVIRONMENT'] == 'dev') {
-            $options['ssl'] = array(
-                'verify_peer' => false,
-                'verify_peer_name' => false,
-            );
-        }
-
-        $context  = stream_context_create($options);
-        $result = file_get_contents($apiEndpoint, false, $context);
-
-        if ($result === false) {
-            dd('Error retrieving authentication signature.');
-        }
-
-        $response = json_decode($result);
-
-        // Check for API errors noting that project encryption don't match Agent's configuration
-        if (isset($response->error) === true && $response->error === true)
-        {
-            dd('An error occured while trying to retrieve authentication signature:' . "\n" . $response->errorMessage);
-        }
-
-        if ($response === false || isset($response->auth) !== true) {
-            dd('Invalid API response when retrieving authentication signature.');
-        }
-
-        if (isset($response->webroot) === false || empty($response->webroot) === true) {
-            dd('Webroot not specified. Incomplete configuration. Please complete the API key confiugration in the web administration panel.');
-        }
-
-        d('Registering project webroot: ' . $response->webroot);
-
-        $this->agent->projectWebroot = $response->webroot;
-
-        $authentication_signature = $response->auth;
+        $authentication_signature = hash_hmac('sha256', $request['socket_id'] . ':' . $_ENV['API_KEY_ID'], $_ENV['API_KEY_ACCESS_TOKEN']);
 
         return [
-            'event' => 'pusher:subscribe',
+            'event' => 'authenticate-as-server',
             'data' => [
-                'auth' => $authentication_signature,
-                'channel' => $this->channelName,
+            'api_key_id' => $_ENV['API_KEY_ID'],
+            'auth' => $authentication_signature,
+            'host_info' => [
+                'internal_ip' => $this->_getLocalIpAddresses(),
+                'hostname' => gethostname(),
+                'php_version' => phpversion(),
+                // TODO: Retrieve extension version
+                'extension_version' => '0.1',
+            ],
             ]
         ];
+    }
+
+    private function _getLocalIpAddresses()
+    {
+        $ip_addresses = array();
+
+        $network_interfaces = net_get_interfaces();
+
+        foreach ($network_interfaces as $network_interface_id => $network_interface)
+        {
+            if ($network_interface_id == 'lo')
+            {
+                continue;
+            }
+
+            if (isset($network_interface['unicast']))
+            {
+                foreach ($network_interface['unicast'] as $info)
+                {
+                    if (isset($info['address']))
+                    {
+                        $ip_addresses[] = $info['address'];
+                    }
+                }
+            }
+        }
+
+        return implode(', ', $ip_addresses);
     }
 
     public function prepareResponse($event, array $response, bool $forceSendingWithoutEncryption = false): array
@@ -186,7 +183,6 @@ class WebSocketsClient
 
         return [
             'event' => $event,
-            'channel' => $this->channelName,
             'data' => $response,
         ];
     }
@@ -246,10 +242,5 @@ class WebSocketsClient
         if ($this->isConnectedToServer) {
             $this->agent->performMaintenance();
         }
-    }
-
-    public function registerCallback($command, $handler): void
-    {
-        $this->commandHandlers[$command] = $handler;
     }
 }
