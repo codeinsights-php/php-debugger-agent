@@ -167,10 +167,11 @@ class WebSocketsClient
 
     public function prepareResponse($event, array $response, bool $forceSendingWithoutEncryption = false): array
     {
+        // TODO: Add logger
+        d('Message to be sent (' . $event . '):');
+        print_r($response);
+
         if ($this->useE2Eencryption === true && $forceSendingWithoutEncryption !== true) {
-            // TODO: Add logger
-            d('Message to be sent (before encryption)');
-            print_r($response);
 
             $nonce = random_bytes(SODIUM_CRYPTO_SECRETBOX_NONCEBYTES);
             $ciphertext = sodium_crypto_secretbox(json_encode($response), $nonce, base64_decode($_ENV['CODEINSIGHTS_MESSAGING_SERVER_ENCRYPTION_KEY_BASE64_ENCODED']));
@@ -188,9 +189,10 @@ class WebSocketsClient
     }
 
     // TODO: DRY up to include prepareResponse() functionality
+    // TODO: Refactor encryption & compression and combine it with prepareResponse()
     public function sendMessage($event, $data, $compress = false)
     {
-        d('Message to be sent (before optional encryption and compression)');
+        d('Message to be sent (before optional encryption and compression) (' . $event . '):');
         print_r($data);
         echo "\n";
 

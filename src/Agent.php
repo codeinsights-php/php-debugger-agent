@@ -100,19 +100,27 @@ class Agent
 
             $logFile = $logPath . $logFilename;
 
-            if (substr($logFilename, -8) == '.message') {
-                $messageRaw = file_get_contents($logFile);
-                $message = json_decode($messageRaw);
+            // TODO: Rethink how message contents are analyzed and partially compressed and/or encrypted
+            // if (substr($logFilename, -8) == '.message') {
+            //     $messageRaw = file_get_contents($logFile);
+            //     $message = json_decode($messageRaw);
 
-                if ($message->type == 'error-when-evaluating-breakpoint') {
-                    $this->removeBreakpoint($message->breakpoint_id);
-                }
+            //     if ($message->type == 'error-when-evaluating-breakpoint') {
+            //         $this->removeBreakpoint($message->breakpoint_id);
+            //     }
 
-                $this->webSocketsClient->sendMessage('client-debugging-event-' . $message->type, $messageRaw);
-            }
-            else {
-                $this->webSocketsClient->sendMessage('client-debugging-event', file_get_contents($logFile), compress: true);
-            }
+            //     $this->webSocketsClient->sendMessage('debug-event-' . $message->type, $messageRaw);
+            // }
+            // else {
+            //     $this->webSocketsClient->sendMessage('debug-event', file_get_contents($logFile), compress: false);
+            // }
+
+            $dataToSend = file_get_contents($logFile);
+            d('Sending raw message from Helper:' . "\n" . $dataToSend);
+            d('Message size: ' . strlen($dataToSend));
+
+            // For now sending raw, without analyzing and encryption and/or compressing
+            $this->webSocketsClient->connection->send($dataToSend);
 
             unlink($logFile);
         }
