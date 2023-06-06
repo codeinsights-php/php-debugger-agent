@@ -51,6 +51,7 @@ it('adds logpoints', function () {
    // Read data from confirmation that logpoint is propagated across servers
    $message = json_decode($this->webSocketsClientUser->receiveMessage(), true);
    $logpoint_id = $message['data']['logpoint_id'];
+   $project_id = $message['data']['project_id'];
 
    // Only the server (Agent) receives info about the full path to the file (including webroot)
    $message = json_decode($this->webSocketsClientServer->receiveMessage(), true);
@@ -75,7 +76,7 @@ debug_helper
 ' . $file_path . '
 18
 1
-\\CodeInsights\\Debugger\\Helper::debug(\'\', \'\', get_defined_vars(), debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS), __FILE__, __LINE__);
+\\CodeInsights\\Debugger\\Helper::debug(\'\', \'\', get_defined_vars(), debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS), __FILE__, __LINE__, ' . $project_id . ');
 ');
 
 });

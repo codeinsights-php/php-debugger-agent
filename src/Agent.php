@@ -164,17 +164,18 @@ class Agent
 
     private function saveBreakpointsInConfigurationFile(): void
     {
-        $debuggerCallback = '\\CodeInsights\\Debugger\\Helper::debug(\'\', \'\', get_defined_vars(), debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS), __FILE__, __LINE__);';
+        $debuggerCallback = '\\CodeInsights\\Debugger\\Helper::debug(\'\', \'\', get_defined_vars(), debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS), __FILE__, __LINE__, %PROJECT_ID%);';
         $breakpointsConfiguration = 'version=1' . "\n";
 
         foreach ($this->breakpoints as $breakpoint) {
+            $debuggerCallbackWithParams = str_replace('%PROJECT_ID%', $breakpoint['project_id'], $debuggerCallback);
             $breakpointsConfiguration .= "\n";
             $breakpointsConfiguration .= 'id=' . $breakpoint['logpoint_id'] . "\n";
             $breakpointsConfiguration .= $breakpoint['type'] . "\n";
             $breakpointsConfiguration .= $breakpoint['file_path'] . "\n";
             $breakpointsConfiguration .= $breakpoint['line_number'] . "\n";
             $breakpointsConfiguration .= $breakpoint['condition'] . "\n";
-            $breakpointsConfiguration .= $debuggerCallback . "\n";
+            $breakpointsConfiguration .= $debuggerCallbackWithParams . "\n";
         }
 
         file_put_contents($this->extensionConfigDir . ini_get('codeinsights.breakpoint_file'), $breakpointsConfiguration, LOCK_EX);
