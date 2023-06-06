@@ -34,8 +34,9 @@ it('can connect to server and authenticate', function () {
 it('adds logpoints', function () {
 
    $this->webSocketsClientUser->handleAuthenticationMessagesFirst();
+   $this->webSocketsClientServer->handleAuthenticationMessagesFirst();
 
-   $file_path = '/data/www/laravel-sample-project/app/Http/Controllers/NewsletterController.php';
+   $file_path = 'app/Http/Controllers/NewsletterController.php';
 
    $this->webSocketsClientUser->sendMessage([
       'event' => 'logpoint-add',
@@ -51,8 +52,16 @@ it('adds logpoints', function () {
    $message = json_decode($this->webSocketsClientUser->receiveMessage(), true);
    $logpoint_id = $message['data']['logpoint_id'];
 
+   // Only the server (Agent) receives info about the full path to the file (including webroot)
+   $message = json_decode($this->webSocketsClientServer->receiveMessage(), true);
+   $file_path = $message['data']['file_path'];
+
    // Wait for the confirmation from the Agent
    $message = $this->webSocketsClientUser->receiveMessage();
+
+   // Closing connection early so that added logpoints get removed automatically
+   // Otherwise the next test will fail due to an old logpoint still lingering from this test
+   $this->webSocketsClientUser->closeConnection();
 
    expect($message)->toBe('{"event":"logpoint-added","data":{"logpoint_id":"' . $logpoint_id . '"}}');
 
@@ -69,15 +78,13 @@ debug_helper
 \\CodeInsights\\Debugger\\Helper::debug(\'\', \'\', get_defined_vars(), debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS), __FILE__, __LINE__);
 ');
 
-   $this->webSocketsClientUser->closeConnection();
-
 });
 
 it('removes logpoints', function () {
 
    $this->webSocketsClientUser->handleAuthenticationMessagesFirst();
 
-   $file_path = '/data/www/laravel-sample-project/app/Http/Controllers/NewsletterController.php';
+   $file_path = 'app/Http/Controllers/NewsletterController.php';
 
    $this->webSocketsClientUser->sendMessage([
       'event' => 'logpoint-add',
