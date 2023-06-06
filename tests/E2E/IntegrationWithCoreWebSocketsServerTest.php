@@ -138,10 +138,62 @@ it('removes logpoints', function () {
 
 });
 
+it('sends debug dumps', function () {
+
+   $file_path = 'app/Http/Controllers/PostController.php';
+
+   // Make path to the demo project webroot configurable?
+   $real_file_path = '../laravel-sample-project/' . $file_path;
+
+   $file_contents = file_get_contents($real_file_path);
+
+   $file_hash = hash('xxh32', $file_contents);
+   $line_number = 0;
+
+   $lines = explode("\n", $file_contents);
+
+   foreach ($lines as $line)
+   {
+      $line_number++;
+
+      if (strpos($line, 'return view(\'posts.index\'') !== false)
+      {
+         break;
+      }
+   }
+
+   $this->webSocketsClientUser->handleAuthenticationMessagesFirst();
+
+   $this->webSocketsClientUser->sendMessage([
+      'event' => 'logpoint-add',
+      'data' => [
+         'file_path' => $file_path,
+         'file_hash' => $file_hash,
+         'line_number' => $line_number,
+      ],
+   ]);
+
+   // Skip confirmation that logpoint will be sent
+   $this->webSocketsClientUser->receiveMessage();
+
+   // Skip confirmation that logpoint was added
+   $this->webSocketsClientUser->receiveMessage();
+
+   // Trigger evaluation of the breakpoint
+   file_get_contents('https://laravel-sample-project.local/');
+
+   // Wait for the Agent to forward debug data
+   $message = $this->webSocketsClientUser->receiveMessage();
+   expect($message)->toBeJson();
+
+   $messageHeader = substr($message, 0, 44);
+   expect($messageHeader)->toBe('{"event":"debug-event","data":{"project_id":');
+
+});
+
 // TODO: Add test for failing to add logpoint - file does not exist
 // TODO: Add test for failing to add logpoint - file hash mismatch
 
-// TODO: How do we test that debug dumps are being sent?
 // TODO: How do we test that errors evaluating logpoints are being sent to server?
 // TODO: How do we test that Agent removes logpoint upon error evaluating logpoint?
 
