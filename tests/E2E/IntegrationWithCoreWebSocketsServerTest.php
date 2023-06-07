@@ -36,16 +36,11 @@ it('adds logpoints', function () {
    $this->webSocketsClientUser->handleAuthenticationMessagesFirst();
    $this->webSocketsClientServer->handleAuthenticationMessagesFirst();
 
-   $file_path = 'app/Http/Controllers/NewsletterController.php';
+   $logpoint = addLogpoint();
 
    $this->webSocketsClientUser->sendMessage([
       'event' => 'logpoint-add',
-      'data' => [
-         'file_path' => $file_path,
-         // TODO: Read hash dynamically
-         'file_hash' => '489ffad6',
-         'line_number' => 18,
-      ],
+      'data' => $logpoint,
    ]);
 
    // Read data from confirmation that logpoint is propagated across servers
@@ -74,7 +69,7 @@ it('adds logpoints', function () {
 id=' . $logpoint_id . '
 debug_helper
 ' . $file_path . '
-18
+' . $logpoint['line_number'] . '
 1
 \\CodeInsights\\Debugger\\Helper::debug(\'\', \'\', get_defined_vars(), debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS), __FILE__, __LINE__, ' . $project_id . ');
 ');
@@ -85,15 +80,11 @@ it('removes logpoints', function () {
 
    $this->webSocketsClientUser->handleAuthenticationMessagesFirst();
 
-   $file_path = 'app/Http/Controllers/NewsletterController.php';
+   $logpoint = addLogpoint();
 
    $this->webSocketsClientUser->sendMessage([
       'event' => 'logpoint-add',
-      'data' => [
-         'file_path' => $file_path,
-         'file_hash' => '489ffad6',
-         'line_number' => 18,
-      ],
+      'data' => $logpoint,
    ]);
 
    // Read data from confirmation that logpoint is propagated across servers
@@ -140,6 +131,55 @@ it('removes logpoints', function () {
 
 it('sends debug dumps', function () {
 
+   $logpoint = addLogpoint();
+
+   $this->webSocketsClientUser->handleAuthenticationMessagesFirst();
+
+   $this->webSocketsClientUser->sendMessage([
+      'event' => 'logpoint-add',
+      'data' => $logpoint,
+   ]);
+
+   // Skip confirmation that logpoint will be sent
+   $this->webSocketsClientUser->receiveMessage();
+
+   // Skip confirmation that logpoint was added
+   $this->webSocketsClientUser->receiveMessage();
+
+   // Trigger evaluation of the breakpoint
+   file_get_contents('https://laravel-sample-project.local/', false, stream_context_create([
+      'ssl' => [
+         'verify_peer' => false,
+         'verify_peer_name' => false,
+         'allow_self_signed' => true,
+      ],
+   ]));
+
+   // Wait for the Agent to forward debug data
+   $message = $this->webSocketsClientUser->receiveMessage();
+   expect($message)->toBeJson();
+
+   $messageHeader = substr($message, 0, 44);
+   expect($messageHeader)->toBe('{"event":"debug-event","data":{"project_id":');
+
+});
+
+it('reports errors evaluating breakpoints')->todo();
+
+it('removes logpoint upon encountering error evaluating breakpoint')->todo();
+
+it('reports error adding logpoint if the file does not exist')->todo();
+
+it('reports error adding logpoint if the hash of the file does not match')->todo();
+
+it('compresses outgoing data')->todo();
+
+it('encrypts outgoing data')->todo();
+
+// TODO: How do we test that upon connection Agent reads full list of previously added logpoints?
+
+function addLogpoint(): array
+{
    $file_path = 'app/Http/Controllers/PostController.php';
 
    // Make path to the demo project webroot configurable?
@@ -162,39 +202,9 @@ it('sends debug dumps', function () {
       }
    }
 
-   $this->webSocketsClientUser->handleAuthenticationMessagesFirst();
-
-   $this->webSocketsClientUser->sendMessage([
-      'event' => 'logpoint-add',
-      'data' => [
-         'file_path' => $file_path,
-         'file_hash' => $file_hash,
-         'line_number' => $line_number,
-      ],
-   ]);
-
-   // Skip confirmation that logpoint will be sent
-   $this->webSocketsClientUser->receiveMessage();
-
-   // Skip confirmation that logpoint was added
-   $this->webSocketsClientUser->receiveMessage();
-
-   // Trigger evaluation of the breakpoint
-   file_get_contents('https://laravel-sample-project.local/');
-
-   // Wait for the Agent to forward debug data
-   $message = $this->webSocketsClientUser->receiveMessage();
-   expect($message)->toBeJson();
-
-   $messageHeader = substr($message, 0, 44);
-   expect($messageHeader)->toBe('{"event":"debug-event","data":{"project_id":');
-
-});
-
-// TODO: Add test for failing to add logpoint - file does not exist
-// TODO: Add test for failing to add logpoint - file hash mismatch
-
-// TODO: How do we test that errors evaluating logpoints are being sent to server?
-// TODO: How do we test that Agent removes logpoint upon error evaluating logpoint?
-
-// TODO: How do we test that upon connection Agent reads full list of previously added logpoints?
+   return [
+      'file_path' => $file_path,
+      'file_hash' => $file_hash,
+      'line_number' => $line_number,
+   ];
+}
