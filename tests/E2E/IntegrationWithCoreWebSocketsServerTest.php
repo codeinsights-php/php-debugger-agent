@@ -212,7 +212,57 @@ it('dumps a specific variable', function() {
 
 });
 
-it('reports errors evaluating breakpoints')->todo();
+it('reports errors evaluating breakpoints', function() {
+
+   $this->webSocketsClientUser->handleAuthenticationMessagesFirst();
+
+   $logpoint = addLogpoint();
+   $logpoint['type'] = 'log';
+   $logpoint['log_message'] = 'Trying to log an undefined variable';
+   $logpoint['log_variable'] = 'non_existent_function()';
+
+   $this->webSocketsClientUser->sendMessage([
+      'event' => 'logpoint-add',
+      'data' => $logpoint,
+   ]);
+
+   // Confirmation that logpoint will be sent
+   $message = json_decode($this->webSocketsClientUser->receiveMessage(), true);
+   $logpoint_id = $message['data']['logpoint_id'];
+
+   // Skip confirmation that logpoint was added
+   $this->webSocketsClientUser->receiveMessage();
+
+   // Trigger evaluation of the breakpoint
+   file_get_contents('https://laravel-sample-project.local/', false, stream_context_create([
+      'ssl' => [
+         'verify_peer' => false,
+         'verify_peer_name' => false,
+         'allow_self_signed' => true,
+      ],
+   ]));
+
+   // Server should receive info about a logpoint error and issue logpoint removal command to all Agents
+   $message = json_decode($this->webSocketsClientUser->receiveMessage(), true);
+   expect($message)->toMatchArray([
+      'event' => 'logpoint-removal-pending',
+      'data' => [
+         'logpoint_id' => $logpoint_id,
+         'removal_reason_code' => 102,
+         'removal_reason_message' => $message['data']['removal_reason_message'],
+      ],
+   ]);
+
+   // Agent should inform about the removal of the logpoint causing errors
+   $message = json_decode($this->webSocketsClientUser->receiveMessage(), true);
+   expect($message)->toMatchArray([
+      'event' => 'logpoint-removed',
+      'data' => [
+         'logpoint_id' => $logpoint_id,
+      ],
+   ]);
+
+});
 
 it('removes logpoint upon encountering error evaluating breakpoint')->todo();
 
