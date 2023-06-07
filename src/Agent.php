@@ -155,23 +155,41 @@ class Agent
         // TODO: Add support for conditional breakpoints
         $breakpointToAdd['condition'] = '1';
 
-        // Placeholder for future functionality
-        // E.g. capability to add timers and counters instead of logpoints
-        $breakpointToAdd['type'] = 'debug_helper';
-
         $this->breakpoints[$breakpointToAdd['logpoint_id']] = $breakpointToAdd;
     }
 
     private function saveBreakpointsInConfigurationFile(): void
     {
-        $debuggerCallback = '\\CodeInsights\\Debugger\\Helper::debug(\'\', \'\', get_defined_vars(), debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS), __FILE__, __LINE__, %PROJECT_ID%);';
         $breakpointsConfiguration = 'version=1' . "\n";
 
         foreach ($this->breakpoints as $breakpoint) {
+
+            switch ($breakpoint['type'])
+            {
+                case 'snapshot':
+                    $debuggerCallback = '\\CodeInsights\\Debugger\\Helper::debug(\'\', \'\', get_defined_vars(), debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS), __FILE__, __LINE__, %PROJECT_ID%);';
+                    break;
+                case 'log':
+                    // TODO: Sanitize variable to avoid code injection
+                    $variable_to_dump = $breakpoint['log_variable'];
+                    $variable_to_dump = str_replace(';', '', $variable_to_dump);
+                    $variable_to_dump = str_replace(',', '', $variable_to_dump);
+
+                    $debuggerCallback = '\\CodeInsights\\Debugger\\Helper::debug(' . $variable_to_dump . ', \'' . addslashes($breakpoint['log_variable']) . '\', array(), debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS), __FILE__, __LINE__, %PROJECT_ID%);';
+
+                    break;
+                default:
+                    // TODO: Throw an error?
+                    d('Unrecognized logpoint type encountered, not saving');
+                    print_r($breakpoint);
+                    continue 2;
+            }
+
             $debuggerCallbackWithParams = str_replace('%PROJECT_ID%', $breakpoint['project_id'], $debuggerCallback);
             $breakpointsConfiguration .= "\n";
             $breakpointsConfiguration .= 'id=' . $breakpoint['logpoint_id'] . "\n";
-            $breakpointsConfiguration .= $breakpoint['type'] . "\n";
+            // This breakpoint "type" triggers error reporting mechanism upon faulty evaluation:
+            $breakpointsConfiguration .= 'debug_helper' . "\n";
             $breakpointsConfiguration .= $breakpoint['file_path'] . "\n";
             $breakpointsConfiguration .= $breakpoint['line_number'] . "\n";
             $breakpointsConfiguration .= $breakpoint['condition'] . "\n";
