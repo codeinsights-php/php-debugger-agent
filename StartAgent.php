@@ -11,6 +11,7 @@ function d(mixed $variable = '')
 function dd(mixed $variable = '')
 {
     d($variable);
+    // TODO: There should be a better way to avoid "hammering" due to process restarts by supervisord (or similar "process runner")
     sleep(30);
     die();
 }
@@ -27,10 +28,17 @@ if (empty($_ENV['CODEINSIGHTS_MESSAGING_SERVER_ENDPOINT'])) {
 
 $loop = \React\EventLoop\Loop::get();
 
-// Check every 100 ms if periodic tasks have to be performed
-// (like checking if peers are alive and performing cleanup of inactive breakpoints or sending accumulated logs)
-// TODO: Make intensity configurable?
-$loop->addPeriodicTimer(0.1, function () use ($webSocketsClient) {
+// Check every X seconds if periodic tasks have to be performed
+// (like sending accumulated logs)
+$eventLoopTimerInterval = 0.1;
+
+if (isset($_ENV['TIME_INTERVAL_IN_SECONDS_BETWEEN_EVENT_LOOP_TASK_RUNS']) && $_ENV['TIME_INTERVAL_IN_SECONDS_BETWEEN_EVENT_LOOP_TASK_RUNS'] >= 0.01) {
+    $eventLoopTimerInterval = $_ENV['TIME_INTERVAL_IN_SECONDS_BETWEEN_EVENT_LOOP_TASK_RUNS'];
+}
+
+d('Setting periodic timer to ' . $eventLoopTimerInterval . ' seconds before task runs.');
+
+$loop->addPeriodicTimer($eventLoopTimerInterval, function () use ($webSocketsClient) {
     $webSocketsClient->performMaintenance();
 });
 

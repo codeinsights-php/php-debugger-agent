@@ -76,14 +76,24 @@ class Agent
     public function performMaintenance(): void
     {
         // d('Performing maintenance');
-
+        // TODO: Check if connection hasn't been authenticated X seconds after connecting
         $this->sendLogsToServer();
     }
 
     private function sendLogsToServer(): void
     {
         // TODO: Make time interval between process runs configurable
-        if ($this->alreadyRun('sending-logs', 1)) {
+        $intervalInSecondsBetweenLogSends = 1;
+
+        if (isset($_ENV['TIME_INTERVAL_IN_SECONDS_BETWEEN_DEBUG_DUMPS_BEING_SENT'])
+            && $_ENV['TIME_INTERVAL_IN_SECONDS_BETWEEN_DEBUG_DUMPS_BEING_SENT'] >= 0) {
+                // Zero seconds should result in at least 100ms between event runs
+                // because that is how often the React event loop periodic timer ticks
+                // as configured (hard-coded) in StartAgent.php
+                $intervalInSecondsBetweenLogSends = $_ENV['TIME_INTERVAL_IN_SECONDS_BETWEEN_DEBUG_DUMPS_BEING_SENT'];
+        }
+
+        if ($this->alreadyRun('sending-logs', $intervalInSecondsBetweenLogSends)) {
             return;
         }
 
