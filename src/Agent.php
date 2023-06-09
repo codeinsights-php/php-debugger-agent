@@ -10,6 +10,7 @@ class Agent
     private array $processTimestamps = [];
 
     private string $extensionConfigDir;
+    private bool $useE2Eencryption;
 
     public function __construct(
         private WebSocketsClient $webSocketsClient,
@@ -17,6 +18,20 @@ class Agent
         $this->_determineExtensionConfigDir();
         $this->_verifyExtensionConfigDir();
 
+        // Determine if end-to-end encryption is enabled and should be used
+        $this->useE2Eencryption = (isset($_ENV['CODEINSIGHTS_MESSAGING_SERVER_USE_E2E_ENCRYPTION']) && $_ENV['CODEINSIGHTS_MESSAGING_SERVER_USE_E2E_ENCRYPTION'] === 'true');
+
+        if ($this->useE2Eencryption) {
+            d('E2E encryption enabled.');
+        }
+
+        if ($this->useE2Eencryption === true && empty($_ENV['CODEINSIGHTS_MESSAGING_SERVER_ENCRYPTION_KEY_BASE64_ENCODED']) === true) {
+            dd('Incomplete configuration, .env has end-to-end encryption enabled, but no encryption key has been provided.');
+        }
+
+        if ($this->useE2Eencryption === true && strlen(base64_decode($_ENV['CODEINSIGHTS_MESSAGING_SERVER_ENCRYPTION_KEY_BASE64_ENCODED'])) !== SODIUM_CRYPTO_SECRETBOX_KEYBYTES) {
+            dd('Incomplete configuration, .env has end-to-end encryption enabled, but encryption key has incorrect length.');
+        }
     }
 
     public function handleLogpointAdd(array $request): void

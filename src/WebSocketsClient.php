@@ -9,25 +9,11 @@ class WebSocketsClient
 {
     private Agent $agent;
     private bool $isConnectedToServer = false;
-    private bool $useE2Eencryption;
     public $connection;
 
     public function __construct()
     {
         $this->agent = new Agent($this);
-        $this->useE2Eencryption = (isset($_ENV['CODEINSIGHTS_MESSAGING_SERVER_USE_E2E_ENCRYPTION']) && $_ENV['CODEINSIGHTS_MESSAGING_SERVER_USE_E2E_ENCRYPTION'] === 'true');
-
-        if ($this->useE2Eencryption) {
-            d('E2E encryption enabled.');
-        }
-
-        if ($this->useE2Eencryption === true && empty($_ENV['CODEINSIGHTS_MESSAGING_SERVER_ENCRYPTION_KEY_BASE64_ENCODED']) === true) {
-            dd('Incomplete configuration, .env has end-to-end encryption enabled, but no encryption key has been provided.');
-        }
-
-        if ($this->useE2Eencryption === true && strlen(base64_decode($_ENV['CODEINSIGHTS_MESSAGING_SERVER_ENCRYPTION_KEY_BASE64_ENCODED'])) !== SODIUM_CRYPTO_SECRETBOX_KEYBYTES) {
-            dd('Incomplete configuration, .env has end-to-end encryption enabled, but encryption key has incorrect length.');
-        }
     }
 
     public function handleIncomingMessage(array $message): void
