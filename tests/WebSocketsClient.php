@@ -47,7 +47,7 @@ class WebSocketsClient
       // Analyse received message contents and perform authentication if necessary
       if (isset($payload->event) && $payload->event == 'server:connection-established')
       {
-         $this->authenticate($payload->data->socket_id);
+         $this->authenticate($payload->header->socket_id);
 
          if ($this->skipMessageAuthenticationRequired !== false)
          {
@@ -99,7 +99,7 @@ class WebSocketsClient
 
       $this->sendMessage([
          'event' => 'authenticate-as-user',
-         'data' => [
+         'header' => [
             'user_id' => $this->clientId,
             'auth' => $authentication_signature,
          ]
@@ -112,9 +112,11 @@ class WebSocketsClient
 
       $this->sendMessage([
          'event' => 'authenticate-as-server',
-         'data' => [
+         'header' => [
             'api_key_id' => $this->clientId,
             'auth' => $authentication_signature,
+         ],
+         'data' => [
             'host_info' => [
                'internal_ip' => '127.0.0.1',
                'hostname' => gethostname(),
@@ -132,7 +134,6 @@ class WebSocketsClient
    {
       $this->sendMessage([
          'event' => 'ping',
-         'data' => [],
       ]);
    }
 

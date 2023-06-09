@@ -63,16 +63,16 @@ class WebSocketsClient
 
         switch ($message['event']) {
             case 'server:connection-established':
-                $this->handleCommandConnectionEstablished($message['data']);
+                $this->handleCommandConnectionEstablished($message['header']);
                 return;
 
             case 'server:authentication-result':
 
-                if ($message['data']['result'] === true)
+                if ($message['header']['result'] === true)
                 {
                     d('Connected successfully.');
                     $this->isConnectedToServer = true;
-                    $this->sendMessage(['event' => 'logpoints-list', 'data' => []]);
+                    $this->sendMessage(['event' => 'logpoints-list']);
                 }
 
                 // TODO: Handle rejections gracefully (do not reconnect)
@@ -107,7 +107,7 @@ class WebSocketsClient
 
                 if (method_exists($this->agent, $action))
                 {
-                    $this->agent->$action((array) $message['data']);
+                    $this->agent->$action($message);
                 } else {
                     d('Unknown command received: ' . $message['event'] . ' (' . $action . ')');
                 }
@@ -120,9 +120,11 @@ class WebSocketsClient
 
         $this->sendMessage([
             'event' => 'authenticate-as-server',
-            'data' => [
+            'header' => [
                 'api_key_id' => $_ENV['API_KEY_ID'],
                 'auth' => $authentication_signature,
+            ],
+            'data' => [
                 'host_info' => [
                     'internal_ip' => $this->_getLocalIpAddresses(),
                     'hostname' => gethostname(),

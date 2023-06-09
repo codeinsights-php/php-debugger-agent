@@ -23,7 +23,9 @@ class Agent
     {
         d('Handling command setBreakpoint');
 
-        if (file_exists($request['file_path']) !== true) {
+        $filePath = $request['header']['webroot'] . $request['data']['file_path'];
+
+        if (file_exists($filePath) !== true) {
 
             $this->webSocketsClient->sendMessage([
                 'event' => 'logpoint-add-error',
@@ -36,9 +38,9 @@ class Agent
             return;
         }
 
-        $fileHash = hash('xxh32', file_get_contents($request['file_path']));
+        $fileHash = hash('xxh32', file_get_contents($filePath));
 
-        if ($request['file_hash'] !== $fileHash) {
+        if ($request['data']['file_hash'] !== $fileHash) {
 
             $this->webSocketsClient->sendMessage([
                 'event' => 'logpoint-add-error',
@@ -52,27 +54,34 @@ class Agent
             return;
         }
 
+        // TODO: Verify that the logpoint isn't being set outside of the webroot
+        // $breakpointToAdd['webroot'] . $breakpointToAdd['file_path'];
+
         $this->addBreakpoint($request);
 
         $this->saveBreakpointsInConfigurationFile();
 
         $this->webSocketsClient->sendMessage([
             'event' => 'logpoint-added',
-            'data' => [
-                'logpoint_id' => $request['logpoint_id'],
-                'project_id' => $request['project_id'],
+            'header' => [
+                'logpoint_id' => $request['header']['logpoint_id'],
+                'project_id' => $request['header']['project_id'],
             ],
         ]);
     }
 
     public function handleLogpointRemove(array $request): void
     {
-        $this->removeBreakpoint($request['logpoint_id']);
+        $this->removeBreakpoint($request['header']['logpoint_id']);
     }
 
-    public function handleLogpointsList(array $request): array
+    public function handleLogpointsList(array $request): void
     {
-        $this->breakpoints = $request;
+        foreach ($request['data'] as $logpoint)
+        {
+            // TODO: Decrypt each logpoint's 'data'
+            $this->addBreakpoint($logpoint);
+        }
 
         return $this->webSocketsClient->doNotRespond();
     }
@@ -158,7 +167,7 @@ class Agent
 
         $this->webSocketsClient->sendMessage([
             'event' => 'logpoint-removed',
-            'data' => [
+            'header' => [
                 'logpoint_id' => $breakpointToRemove_id,
                 'project_id' => $projectId,
             ],
@@ -167,6 +176,10 @@ class Agent
 
     private function addBreakpoint(array $breakpointToAdd): void {
         // Should we check if the breakpoint hasn't been already added?
+
+        $breakpointToAdd = array_merge($breakpointToAdd['header'], $breakpointToAdd['data']);
+
+        // TODO: Validate each logpoint here? (file path, file hash)
 
         // TODO: Add support for conditional breakpoints
         $breakpointToAdd['condition'] = '1';
@@ -206,7 +219,7 @@ class Agent
             $breakpointsConfiguration .= 'id=' . $breakpoint['logpoint_id'] . "\n";
             // This breakpoint "type" triggers error reporting mechanism upon faulty evaluation:
             $breakpointsConfiguration .= 'debug_helper' . "\n";
-            $breakpointsConfiguration .= $breakpoint['file_path'] . "\n";
+            $breakpointsConfiguration .= $breakpoint['webroot'] . $breakpoint['file_path'] . "\n";
             $breakpointsConfiguration .= $breakpoint['line_number'] . "\n";
             $breakpointsConfiguration .= $breakpoint['condition'] . "\n";
             $breakpointsConfiguration .= $debuggerCallbackWithParams . "\n";
