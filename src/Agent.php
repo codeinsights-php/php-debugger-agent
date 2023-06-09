@@ -43,9 +43,9 @@ class Agent
         if (file_exists($filePath) !== true) {
 
             $this->webSocketsClient->sendMessage([
-                'event' => 'logpoint-add-error',
+                'event' => 'logpoint-error-adding',
+                // TODO: Return only logpoint id, omit all the other logpoint info
                 'data' => $request + [
-                    'error' => true,
                     'errorMessage' => 'File does not exist.',
                 ],
             ]);
@@ -58,9 +58,9 @@ class Agent
         if ($request['data']['file_hash'] !== $fileHash) {
 
             $this->webSocketsClient->sendMessage([
-                'event' => 'logpoint-add-error',
+                'event' => 'logpoint-error-adding',
+                // TODO: Return only logpoint id, omit all the other logpoint info
                 'data' => $request + [
-                    'error' => true,
                     'errorMessage' => 'PHP file contents in production environment differ. Please make sure you are using identical version ' .
                         'to the one in production environment when setting breakpoints.',
                 ],
