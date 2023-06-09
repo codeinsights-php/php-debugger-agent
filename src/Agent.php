@@ -124,6 +124,10 @@ class Agent
             // TODO: Enable data compression (configurable to make it compatible with end-to-end testing?)
             $this->webSocketsClient->sendMessage($message, $this->useE2Eencryption, false);
 
+            if ($message->event == 'logpoint-error-evaluating') {
+                $this->removeBreakpoint($message->data->logpoint_id);
+            }
+
             unlink($logFile);
         }
     }

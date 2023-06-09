@@ -146,7 +146,7 @@ it('sends debug dumps', function () {
    // Skip confirmation that logpoint was added
    $this->webSocketsClientUser->receiveMessage();
 
-   // Trigger evaluation of the breakpoint
+   // Trigger evaluation of the logpoint
    file_get_contents('https://laravel-sample-project.local/', false, stream_context_create([
       'ssl' => [
          'verify_peer' => false,
@@ -184,7 +184,7 @@ it('dumps a specific variable', function() {
    // Skip confirmation that logpoint was added
    $this->webSocketsClientUser->receiveMessage();
 
-   // Trigger evaluation of the breakpoint
+   // Trigger evaluation of the logpoint
    file_get_contents('https://laravel-sample-project.local/?test=get_variable', false, stream_context_create([
       'ssl' => [
          'verify_peer' => false,
@@ -212,7 +212,7 @@ it('dumps a specific variable', function() {
 
 });
 
-it('reports errors evaluating breakpoints', function() {
+it('reports errors evaluating logpoints', function() {
 
    $this->webSocketsClientUser->handleAuthenticationMessagesFirst();
 
@@ -233,7 +233,7 @@ it('reports errors evaluating breakpoints', function() {
    // Skip confirmation that logpoint was added
    $this->webSocketsClientUser->receiveMessage();
 
-   // Trigger evaluation of the breakpoint
+   // Trigger evaluation of the logpoint
    file_get_contents('https://laravel-sample-project.local/', false, stream_context_create([
       'ssl' => [
          'verify_peer' => false,
@@ -264,7 +264,61 @@ it('reports errors evaluating breakpoints', function() {
 
 });
 
-it('removes logpoint upon encountering error evaluating breakpoint')->todo();
+it('removes logpoint upon encountering error evaluating logpoint', function() {
+
+   $this->webSocketsClientUser->handleAuthenticationMessagesFirst();
+
+   $logpoint = addLogpoint();
+   $logpoint['type'] = 'log';
+   $logpoint['log_message'] = 'Trying to log an undefined variable';
+   $logpoint['log_variable'] = 'non_existent_function()';
+
+   $this->webSocketsClientUser->sendMessage([
+      'event' => 'logpoint-add',
+      'data' => $logpoint,
+   ]);
+
+   // Alternatively we can listen the absolute path sent by the server to all the Agents
+   $file_path = realpath('../laravel-sample-project/' . $logpoint['file_path']);
+
+   // Confirmation that logpoint will be sent
+   $message = json_decode($this->webSocketsClientUser->receiveMessage(), true);
+   $logpoint = $message['data'];
+
+   // Skip confirmation that logpoint was added
+   $this->webSocketsClientUser->receiveMessage();
+
+   $logpointsConfiguration = file_get_contents(ini_get('codeinsights.directory') . ini_get('codeinsights.breakpoint_file'));
+
+   // Check that Agent has listed the logpoint
+   expect($logpointsConfiguration)->toBe('version=1
+
+id=' . $logpoint['logpoint_id'] . '
+debug_helper
+' . $file_path . '
+' . $logpoint['line_number'] . '
+1
+\\CodeInsights\\Debugger\\Helper::debug(non_existent_function(), \'non_existent_function()\', array(), debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS), __FILE__, __LINE__, ' . $logpoint['project_id'] . ');
+');
+
+   // Trigger evaluation of the logpoint
+   file_get_contents('https://laravel-sample-project.local/', false, stream_context_create([
+      'ssl' => [
+         'verify_peer' => false,
+         'verify_peer_name' => false,
+         'allow_self_signed' => true,
+      ],
+   ]));
+
+   // Server should receive info about a logpoint error and issue logpoint removal command to all Agents
+   $this->webSocketsClientUser->receiveMessage();
+
+   // Verify that Agent removed the faulty logpoint
+   $logpointsConfiguration = file_get_contents(ini_get('codeinsights.directory') . ini_get('codeinsights.breakpoint_file'));
+
+   expect($logpointsConfiguration)->toBe('version=1' . "\n");
+
+});
 
 it('reports error adding logpoint if the file does not exist')->todo();
 
