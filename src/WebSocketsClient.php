@@ -10,7 +10,6 @@ class WebSocketsClient
     private Agent $agent;
     private bool $isConnectedToServer = false;
     private bool $useE2Eencryption;
-    private string $channelName;
     public $connection;
 
     public function __construct()
@@ -29,15 +28,13 @@ class WebSocketsClient
         if ($this->useE2Eencryption === true && strlen(base64_decode($_ENV['CODEINSIGHTS_MESSAGING_SERVER_ENCRYPTION_KEY_BASE64_ENCODED'])) !== SODIUM_CRYPTO_SECRETBOX_KEYBYTES) {
             dd('Incomplete configuration, .env has end-to-end encryption enabled, but encryption key has incorrect length.');
         }
-
-        $this->channelName = 'private-' . ($this->useE2Eencryption === true ? 'encrypted-' : '') . $_ENV['API_KEY_ID'] . '-' . $_ENV['API_KEY_ACCESS_TOKEN'];
     }
 
-    public function handleIncomingMessage(array $message): array
+    public function handleIncomingMessage(array $message): void
     {
         if (isset($message['event']) === false) {
             d('Invalid message received.');
-            return $this->doNotRespond();
+            return;
         }
 
         // Some messages (e.g. during authentication) are not encrypted
@@ -46,7 +43,7 @@ class WebSocketsClient
             $nonce = base64_decode($message['data']['nonce']);
             $encryptedMessage = base64_decode($message['data']['ciphertext']);
 
-            // TODO: Verify that decoding was successful, notify about potentially incorrect encryption key
+            // Verify that decoding was successful, notify about potentially incorrect encryption key
             $decryptedMessage = sodium_crypto_secretbox_open($encryptedMessage, $nonce, $encryptionKey);
 
             if ($decryptedMessage === false)
@@ -54,7 +51,8 @@ class WebSocketsClient
                 d('Could not decrypt message. Please verify if the same encryption key is used by client (IDE) and Agent.');
 
                 // TODO: Use simultaneously also subscription to an unencrypted channel and Send this message there?
-                return $this->prepareResponse('client-agent-encountered-error', ['errorCode' => 'MESSAGE_DECRYPTION_FAILED'], $forceSendingWithoutEncryption = true);
+                $this->sendMessage(['event' => 'client-agent-encountered-error', ['errorCode' => 'MESSAGE_DECRYPTION_FAILED']], false);
+                return;
             }
 
             $message['data'] = json_decode($decryptedMessage);
@@ -65,7 +63,8 @@ class WebSocketsClient
 
         switch ($message['event']) {
             case 'server:connection-established':
-                return $this->handleCommandConnectionEstablished($message['data']);
+                $this->handleCommandConnectionEstablished($message['data']);
+                return;
 
             case 'server:authentication-result':
 
@@ -73,12 +72,12 @@ class WebSocketsClient
                 {
                     d('Connected successfully.');
                     $this->isConnectedToServer = true;
-                    return ['event' => 'logpoints-list', 'data' => []];
+                    $this->sendMessage(['event' => 'logpoints-list', 'data' => []]);
                 }
 
                 // TODO: Handle rejections gracefully (do not reconnect)
 
-                return $this->doNotRespond();
+                return;
 
             case 'pusher:error':
 
@@ -93,12 +92,12 @@ class WebSocketsClient
                 // )
 
                 if (isset($message['data']['message']) && strpos($message['data']['message'], 'The data content of this event exceeds the allowed maximum (10240 bytes)') !== false) {
-                    return $this->prepareResponse('client-agent-encountered-error', ['errorCode' => 'DATA_CONTENT_LIMIT_EXCEEDED']);
+                    $this->sendMessage(['event' => 'client-agent-encountered-error', 'data' => ['errorCode' => 'DATA_CONTENT_LIMIT_EXCEEDED']]);
                 }
 
                 // TODO: Perform additional logging / reporting of received Pusher error messages
 
-                return $this->doNotRespond();
+                return;
 
             default:
                 $action = str_replace('-', ' ', $message['event']);
@@ -108,33 +107,31 @@ class WebSocketsClient
 
                 if (method_exists($this->agent, $action))
                 {
-                    return $this->agent->$action((array) $message['data']);
+                    $this->agent->$action((array) $message['data']);
                 } else {
                     d('Unknown command received: ' . $message['event'] . ' (' . $action . ')');
                 }
         }
-
-        return $this->doNotRespond();
     }
 
     private function handleCommandConnectionEstablished(array $request): array
     {
         $authentication_signature = hash_hmac('sha256', $request['socket_id'] . ':' . $_ENV['API_KEY_ID'], $_ENV['API_KEY_ACCESS_TOKEN']);
 
-        return [
+        $this->sendMessage([
             'event' => 'authenticate-as-server',
             'data' => [
-            'api_key_id' => $_ENV['API_KEY_ID'],
-            'auth' => $authentication_signature,
-            'host_info' => [
-                'internal_ip' => $this->_getLocalIpAddresses(),
-                'hostname' => gethostname(),
-                'php_version' => phpversion(),
-                // TODO: Retrieve extension version
-                'extension_version' => '0.1',
+                'api_key_id' => $_ENV['API_KEY_ID'],
+                'auth' => $authentication_signature,
+                'host_info' => [
+                    'internal_ip' => $this->_getLocalIpAddresses(),
+                    'hostname' => gethostname(),
+                    'php_version' => phpversion(),
+                    // TODO: Retrieve extension version
+                    'extension_version' => '0.1',
+                ],
             ],
-            ]
-        ];
+        ]);
     }
 
     private function _getLocalIpAddresses()
@@ -165,69 +162,35 @@ class WebSocketsClient
         return implode(', ', $ip_addresses);
     }
 
-    public function prepareResponse($event, array $response, bool $forceSendingWithoutEncryption = false): array
+    public function sendMessage($message, $encrypt = false, $compress = false)
     {
-        // TODO: Add logger
-        d('Message to be sent (' . $event . '):');
-        print_r($response);
-
-        if ($this->useE2Eencryption === true && $forceSendingWithoutEncryption !== true) {
-
-            $nonce = random_bytes(SODIUM_CRYPTO_SECRETBOX_NONCEBYTES);
-            $ciphertext = sodium_crypto_secretbox(json_encode($response), $nonce, base64_decode($_ENV['CODEINSIGHTS_MESSAGING_SERVER_ENCRYPTION_KEY_BASE64_ENCODED']));
-
-            $response = [
-                'nonce' => base64_encode($nonce),
-                'ciphertext' => base64_encode($ciphertext),
-            ];
-        }
-
-        return [
-            'event' => $event,
-            'data' => $response,
-        ];
-    }
-
-    // TODO: DRY up to include prepareResponse() functionality
-    // TODO: Refactor encryption & compression and combine it with prepareResponse()
-    public function sendMessage($event, $data, $compress = false)
-    {
-        d('Message to be sent (before optional encryption and compression) (' . $event . '):');
-        print_r($data);
+        d('Message to be sent (before optional encryption and compression):');
+        print_r($message);
         echo "\n";
 
         if ($compress === true) {
-            $data = gzdeflate($data, 9, ZLIB_ENCODING_DEFLATE);
+            $message['data'] = gzdeflate($message['data'], 9, ZLIB_ENCODING_DEFLATE);
 
-            if ($this->useE2Eencryption !== true) {
-                $data = base64_encode($data);
+            if ($encrypt !== true) {
+                $message['data'] = base64_encode($message['data']);
             }
+
+            $mesage['compressed'] = true;
         }
 
-        if ($this->useE2Eencryption === true) {
+        if ($encrypt === true) {
             $nonce = random_bytes(SODIUM_CRYPTO_SECRETBOX_NONCEBYTES);
-            $ciphertext = sodium_crypto_secretbox($data, $nonce, base64_decode($_ENV['CODEINSIGHTS_MESSAGING_SERVER_ENCRYPTION_KEY_BASE64_ENCODED']));
+            $ciphertext = sodium_crypto_secretbox($message['data'], $nonce, base64_decode($_ENV['CODEINSIGHTS_MESSAGING_SERVER_ENCRYPTION_KEY_BASE64_ENCODED']));
 
-            $data = [
+            $message['data'] = [
                 'nonce' => base64_encode($nonce),
                 'ciphertext' => base64_encode($ciphertext),
             ];
 
-            if ($compress === true) {
-                $data['compressed'] = true;
-            }
-        } elseif ($compress === true) {
-            $data = [
-                'message' => $data,
-                'compressed' => true,
-            ];
+            $mesage['encrypted'] = true;
         }
 
-        $dataToSend = json_encode([
-            'event' => $event,
-            'channel' => $this->channelName,
-            'data' => $data,
-        ]);
+        $dataToSend = json_encode($message);
 
         d('Sent message size: ' . strlen($dataToSend));
 

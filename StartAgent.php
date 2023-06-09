@@ -79,11 +79,7 @@ $connector($_ENV['CODEINSIGHTS_MESSAGING_SERVER_ENDPOINT'])->then(function ($con
 
         print_r($message);
 
-        $response = $webSocketsClient->handleIncomingMessage($message);
-
-        if (empty($response) === false) {
-            $connection->send(json_encode($response));
-        }
+        $webSocketsClient->handleIncomingMessage($message);
     });
 
     // Custom addition to Ratchet code has to be added

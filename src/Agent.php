@@ -21,49 +21,55 @@ class Agent
         $this->saveBreakpointsInConfigurationFile();
     }
 
-    public function handleLogpointAdd(array $request): array
+    public function handleLogpointAdd(array $request): void
     {
         d('Handling command setBreakpoint');
 
         if (file_exists($request['file_path']) !== true) {
-            return $this->webSocketsClient->prepareResponse('logpoint-add-error', $request + [
-                'error' => true,
-                'errorMessage' => 'File does not exist.',
+
+            $this->webSocketsClient->sendMessage([
+                'event' => 'logpoint-add-error',
+                'data' => $request + [
+                    'error' => true,
+                    'errorMessage' => 'File does not exist.',
+                ],
             ]);
+
+            return;
         }
 
         $fileHash = hash('xxh32', file_get_contents($request['file_path']));
 
         if ($request['file_hash'] !== $fileHash) {
-            return $this->webSocketsClient->prepareResponse('logpoint-add-error', $request + [
-                'error' => true,
-                'errorMessage' => 'PHP file contents in production environment differ. Please make sure you are using identical version ' .
-                    'to the one in production environment when setting breakpoints.',
+
+            $this->webSocketsClient->sendMessage([
+                'event' => 'logpoint-add-error',
+                'data' => $request + [
+                    'error' => true,
+                    'errorMessage' => 'PHP file contents in production environment differ. Please make sure you are using identical version ' .
+                        'to the one in production environment when setting breakpoints.',
+                ],
             ]);
+
+            return;
         }
 
         $this->addBreakpoint($request);
 
         $this->saveBreakpointsInConfigurationFile();
 
-        return $this->webSocketsClient->prepareResponse('logpoint-added', [
-            'logpoint_id' => $request['logpoint_id'],
-            'project_id' => $request['project_id'],
+        $this->webSocketsClient->sendMessage([
+            'event' => 'logpoint-added',
+            'data' => [
+                'logpoint_id' => $request['logpoint_id'],
+                'project_id' => $request['project_id'],
+            ],
         ]);
     }
 
-    public function handleLogpointRemove(array $request): array
+    public function handleLogpointRemove(array $request): void
     {
-        // TODO: Verify if the logpoint actually exists
-        $projectId = $this->breakpoints[$request['logpoint_id']]['project_id'];
-
-        // TODO: Validate if logpoint really was removed (if the logpoint really did exist)
         $this->removeBreakpoint($request['logpoint_id']);
-
-        return $this->webSocketsClient->prepareResponse('logpoint-removed', [
-            'logpoint_id' => $request['logpoint_id'],
-            'project_id' => $projectId,
-        ]);
     }
 
     public function handleLogpointsList(array $request): array
@@ -110,27 +116,13 @@ class Agent
 
             $logFile = $logPath . $logFilename;
 
-            // TODO: Rethink how message contents are analyzed and partially compressed and/or encrypted
-            // if (substr($logFilename, -8) == '.message') {
-            //     $messageRaw = file_get_contents($logFile);
-            //     $message = json_decode($messageRaw);
-
-            //     if ($message->type == 'error-when-evaluating-breakpoint') {
-            //         $this->removeBreakpoint($message->breakpoint_id);
-            //     }
-
-            //     $this->webSocketsClient->sendMessage('debug-event-' . $message->type, $messageRaw);
-            // }
-            // else {
-            //     $this->webSocketsClient->sendMessage('debug-event', file_get_contents($logFile), compress: false);
-            // }
-
             $dataToSend = file_get_contents($logFile);
             d('Sending raw message from Helper:' . "\n" . $dataToSend);
-            d('Message size: ' . strlen($dataToSend));
 
-            // For now sending raw, without analyzing and encryption and/or compressing
-            $this->webSocketsClient->connection->send($dataToSend);
+            $message = json_decode($dataToSend);
+
+            // TODO: Enable data compression (configurable to make it compatible with end-to-end testing?)
+            $this->webSocketsClient->sendMessage($message, $this->useE2Eencryption, false);
 
             unlink($logFile);
         }
@@ -146,17 +138,29 @@ class Agent
         return true;
     }
 
-    private function removeBreakpoint($breakpointToRemove_id): bool
+    private function removeBreakpoint($breakpointToRemove_id): void
     {
         if (isset($this->breakpoints[$breakpointToRemove_id]) === false)
         {
-            return false;
+            // TODO: Raise error?
+            d('Unexpected error. Logpoint that was requested to be removed does not exist.');
+            return;
         }
+
+        $projectId = $this->breakpoints[$breakpointToRemove_id]['project_id'];
+
+        d('Removing breakpoint ' . $breakpointToRemove_id);
 
         unset($this->breakpoints[$breakpointToRemove_id]);
         $this->saveBreakpointsInConfigurationFile();
 
-        return true;
+        $this->webSocketsClient->sendMessage([
+            'event' => 'logpoint-removed',
+            'data' => [
+                'logpoint_id' => $breakpointToRemove_id,
+                'project_id' => $projectId,
+            ],
+        ]);
     }
 
     private function addBreakpoint(array $breakpointToAdd): void {
