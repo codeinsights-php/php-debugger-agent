@@ -17,8 +17,6 @@ class Agent
         $this->_determineExtensionConfigDir();
         $this->_verifyExtensionConfigDir();
 
-        // Clear existing breakpoints from the configuration file upon startup
-        $this->saveBreakpointsInConfigurationFile();
     }
 
     public function handleLogpointAdd(array $request): void
