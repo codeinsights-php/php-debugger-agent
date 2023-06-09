@@ -141,13 +141,27 @@ class Agent
             $dataToSend = file_get_contents($logFile);
             d('Sending raw message from Helper:' . "\n" . $dataToSend);
 
-            $message = json_decode($dataToSend);
+            $message = json_decode($dataToSend, true);
+
+            $compressMessage = true;
+
+            if (isset($_ENV['CODEINSIGHTS_MESSAGING_SERVER_ENABLE_COMPRESSION_FOR_DEBUG_DUMPS'])
+                && $_ENV['CODEINSIGHTS_MESSAGING_SERVER_ENABLE_COMPRESSION_FOR_DEBUG_DUMPS'] == 'false')
+            {
+                $compressMessage = false;
+            }
+
+            $encryptMessage = $this->useE2Eencryption;
+
+            if ($message['event'] == 'logpoint-error-evaluating') {
+                $encryptMessage = false;
+            }
 
             // TODO: Enable data compression (configurable to make it compatible with end-to-end testing?)
-            $this->webSocketsClient->sendMessage($message, $this->useE2Eencryption, false);
+            $this->webSocketsClient->sendMessage($message, $encryptMessage, $compressMessage);
 
-            if ($message->event == 'logpoint-error-evaluating') {
-                $this->removeBreakpoint($message->data->logpoint_id);
+            if ($message['event'] == 'logpoint-error-evaluating') {
+                $this->removeBreakpoint($message['header']['logpoint_id']);
             }
 
             unlink($logFile);

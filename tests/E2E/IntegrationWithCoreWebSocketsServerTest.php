@@ -325,9 +325,31 @@ it('reports error adding logpoint if the file does not exist')->todo();
 
 it('reports error adding logpoint if the hash of the file does not match')->todo();
 
-it('compresses outgoing data')->todo();
+// TODO: Run different variations of tests:
+// - encryption ON, compression ON
+// - encryption ON, compression OFF
+// - encryption OFF, compression ON
+// - encryption OFF, compression OFF
+// (it means restarting Agent, though, because only then configuration changes take effect)
 
-it('encrypts outgoing data')->todo();
+it('compresses outgoing data', function() {
+
+   // If debug dump tests were run succesfully, it means that decompression most probably worked behind the scenes just fine
+
+})->skip(
+   (isset($_ENV['CODEINSIGHTS_MESSAGING_SERVER_ENABLE_COMPRESSION_FOR_DEBUG_DUMPS']) === true
+      && $_ENV['CODEINSIGHTS_MESSAGING_SERVER_ENABLE_COMPRESSION_FOR_DEBUG_DUMPS'] == 'false'),
+   'Agent wasn\'t started with the configuration that enables compression usage.'
+);
+
+it('encrypts outgoing data', function() {
+
+   // If debug dump tests were run succesfully, it means that decryption most probably worked behind the scenes just fine
+
+})->skip(
+   $_ENV['CODEINSIGHTS_MESSAGING_SERVER_USE_E2E_ENCRYPTION'] == 'false',
+   'Agent wasn\'t started with the configuration that enables end-to-end encryption usage.'
+);
 
 // TODO: How do we test that upon connection Agent reads full list of previously added logpoints?
 

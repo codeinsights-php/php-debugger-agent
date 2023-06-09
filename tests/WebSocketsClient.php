@@ -64,6 +64,47 @@ class WebSocketsClient
          }
       }
 
+      // Perform decryption
+      $encrypted = (isset($payload->encrypted) && $payload->encrypted === true);
+
+      if ($encrypted)
+      {
+         $encryptionKey = base64_decode($_ENV['CODEINSIGHTS_MESSAGING_SERVER_ENCRYPTION_KEY_BASE64_ENCODED']);
+         $nonce = base64_decode($payload->nonce);
+         $encryptedMessage = base64_decode($payload->ciphertext);
+
+         $decryptedMessage = sodium_crypto_secretbox_open($encryptedMessage, $nonce, $encryptionKey);
+
+         $payload->data = $decryptedMessage;
+
+         unset($payload->nonce);
+         unset($payload->ciphertext);
+         unset($payload->encrypted);
+      }
+
+      // Perform decompression
+      $compressed = (isset($payload->compressed) && $payload->compressed === true);
+
+      if ($compressed)
+      {
+         $message = $payload->data;
+
+         if ($encrypted !== true)
+         {
+            $message = base64_decode($message);
+         }
+
+         $payload->data = gzuncompress($message);
+
+         unset($payload->compressed);
+      }
+
+      if ($compressed || $encrypted)
+      {
+         $payload->data = json_decode($payload->data);
+         $receivedMessage = json_encode($payload);
+      }
+
       return $receivedMessage;
    }
 

@@ -24,10 +24,10 @@ class WebSocketsClient
         }
 
         // Some messages (e.g. during authentication) are not encrypted
-        if (isset($message['data']['ciphertext']) && isset($message['data']['nonce'])) {
+        if (isset($message['encrypted']) && $message['encrypted'] === true) {
             $encryptionKey = base64_decode($_ENV['CODEINSIGHTS_MESSAGING_SERVER_ENCRYPTION_KEY_BASE64_ENCODED']);
-            $nonce = base64_decode($message['data']['nonce']);
-            $encryptedMessage = base64_decode($message['data']['ciphertext']);
+            $nonce = base64_decode($message['nonce']);
+            $encryptedMessage = base64_decode($message['ciphertext']);
 
             // Verify that decoding was successful, notify about potentially incorrect encryption key
             $decryptedMessage = sodium_crypto_secretbox_open($encryptedMessage, $nonce, $encryptionKey);
@@ -152,35 +152,42 @@ class WebSocketsClient
 
     public function sendMessage($message, $encrypt = false, $compress = false)
     {
-        d('Message to be sent (before optional encryption and compression):');
+        d('Message to be sent:');
         print_r($message);
         echo "\n";
 
+        d('Performing compression: ' . (int) $compress);
+        d('Performing encryption: ' . (int) $encrypt);
+
         if ($compress === true) {
-            $message['data'] = gzdeflate($message['data'], 9, ZLIB_ENCODING_DEFLATE);
+            $messageToCompress = is_array($message['data']) ? json_encode($message['data']) : $message['data'];
+            $message['data'] = gzdeflate($messageToCompress, 9, ZLIB_ENCODING_DEFLATE);
 
             if ($encrypt !== true) {
                 $message['data'] = base64_encode($message['data']);
             }
 
-            $mesage['compressed'] = true;
+            $message['compressed'] = true;
         }
 
         if ($encrypt === true) {
+            $messageToEncrypt = is_array($message['data']) ? json_encode($message['data']) : $message['data'];
             $nonce = random_bytes(SODIUM_CRYPTO_SECRETBOX_NONCEBYTES);
-            $ciphertext = sodium_crypto_secretbox($message['data'], $nonce, base64_decode($_ENV['CODEINSIGHTS_MESSAGING_SERVER_ENCRYPTION_KEY_BASE64_ENCODED']));
+            $ciphertext = sodium_crypto_secretbox($messageToEncrypt, $nonce, base64_decode($_ENV['CODEINSIGHTS_MESSAGING_SERVER_ENCRYPTION_KEY_BASE64_ENCODED']));
 
-            $message['data'] = [
+            unset($message['data']);
+
+            $message = $message + [
                 'nonce' => base64_encode($nonce),
                 'ciphertext' => base64_encode($ciphertext),
+                'encrypted' => true,
             ];
-
-            $mesage['encrypted'] = true;
         }
 
         $dataToSend = json_encode($message);
 
-        d('Sent message size: ' . strlen($dataToSend));
+        d('Sending message:' . "\n" . $dataToSend);
+        d('Message size: ' . strlen($dataToSend));
 
         $this->connection->send($dataToSend);
     }
