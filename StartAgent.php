@@ -72,11 +72,6 @@ $connector($_ENV['CODEINSIGHTS_MESSAGING_SERVER_ENDPOINT'])->then(function ($con
 
         $message = json_decode($msg, true);
 
-        if (is_string($message['data'])) {
-            // event "pusher:connection_established" has data as string which contains json
-            $message['data'] = json_decode($message['data'], true);
-        }
-
         print_r($message);
 
         $webSocketsClient->handleIncomingMessage($message);
