@@ -98,7 +98,7 @@ class Agent
             $this->addBreakpoint($logpoint);
         }
 
-        return $this->webSocketsClient->doNotRespond();
+        $this->saveBreakpointsInConfigurationFile();
     }
 
     public function performMaintenance(): void

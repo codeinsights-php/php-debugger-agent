@@ -185,11 +185,6 @@ class WebSocketsClient
         $this->connection->send($dataToSend);
     }
 
-    public function doNotRespond(): array
-    {
-        return [];
-    }
-
     public function performMaintenance(): void
     {
         if ($this->isConnectedToServer) {
