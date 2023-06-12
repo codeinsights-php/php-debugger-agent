@@ -321,9 +321,102 @@ debug_helper
 
 });
 
-it('reports error adding logpoint if the file does not exist')->todo();
+it('reports error adding logpoint if the file does not exist', function () {
 
-it('reports error adding logpoint if the hash of the file does not match')->todo();
+   $this->webSocketsClientUser->handleAuthenticationMessagesFirst();
+
+   $logpoint = addLogpoint();
+
+   $logpoint['file_path'] = $logpoint['file_path'] . '.non-existent-file-suffix';
+
+   $this->webSocketsClientUser->sendMessage([
+      'event' => 'logpoint-add',
+      'data' => $logpoint,
+   ]);
+
+   // Read data from confirmation that logpoint is propagated across servers
+   $message = json_decode($this->webSocketsClientUser->receiveMessage(), true);
+   $logpoint_id = $message['header']['logpoint_id'];
+
+   // Agent should report that it was unable to add the file
+   $message = json_decode($this->webSocketsClientUser->receiveMessage(), true);
+
+   expect($message)->toMatchArray([
+      'event' => 'logpoint-removal-pending',
+      'header' => [
+         'logpoint_id' => $logpoint_id,
+         'removal_reason_code' => 103,
+         'removal_reason_message' => $message['header']['removal_reason_message'],
+      ],
+      // TODO: Look also for detailed error reason code
+   ]);
+
+});
+
+it('reports error adding logpoint if the hash of the file does not match', function () {
+
+   $this->webSocketsClientUser->handleAuthenticationMessagesFirst();
+
+   $logpoint = addLogpoint();
+
+   $logpoint['file_hash'] = $logpoint['file_hash'] . 'invalid-hash';
+
+   $this->webSocketsClientUser->sendMessage([
+      'event' => 'logpoint-add',
+      'data' => $logpoint,
+   ]);
+
+   // Read data from confirmation that logpoint is propagated across servers
+   $message = json_decode($this->webSocketsClientUser->receiveMessage(), true);
+   $logpoint_id = $message['header']['logpoint_id'];
+
+   // Agent should report that it was unable to add the file
+   $message = json_decode($this->webSocketsClientUser->receiveMessage(), true);
+
+   expect($message)->toMatchArray([
+      'event' => 'logpoint-removal-pending',
+      'header' => [
+         'logpoint_id' => $logpoint_id,
+         'removal_reason_code' => 103,
+         'removal_reason_message' => $message['header']['removal_reason_message'],
+      ],
+      // TODO: Look also for detailed error reason code
+   ]);
+
+});
+
+it('reports error adding logpoint if the file path is outside the webroot', function () {
+
+   $this->webSocketsClientUser->handleAuthenticationMessagesFirst();
+
+   $logpoint = addLogpoint();
+
+   $logpoint['file_path'] = '../' . $logpoint['file_path'];
+   $logpoint['file_path'] = '../codeinsights-php-debugger-agent/StartAgent.php';
+
+   $this->webSocketsClientUser->sendMessage([
+      'event' => 'logpoint-add',
+      'data' => $logpoint,
+   ]);
+
+   // Read data from confirmation that logpoint is propagated across servers
+   $message = json_decode($this->webSocketsClientUser->receiveMessage(), true);
+   $logpoint_id = $message['header']['logpoint_id'];
+
+   // Agent should report that it was unable to add the file
+   $message = json_decode($this->webSocketsClientUser->receiveMessage(), true);
+
+   expect($message)->toMatchArray([
+      'event' => 'logpoint-removal-pending',
+      'header' => [
+         'logpoint_id' => $logpoint_id,
+         'removal_reason_code' => 103,
+         'removal_reason_message' => $message['header']['removal_reason_message'],
+      ],
+      // TODO: Look also for detailed error reason code
+   ]);
+
+});
 
 // TODO: Run different variations of tests:
 // - encryption ON, compression ON

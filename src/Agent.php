@@ -38,51 +38,19 @@ class Agent
     {
         d('Handling command setBreakpoint');
 
-        $filePath = $request['header']['webroot'] . $request['data']['file_path'];
-
-        if (file_exists($filePath) !== true) {
-
-            $this->webSocketsClient->sendMessage([
-                'event' => 'logpoint-error-adding',
-                // TODO: Return only logpoint id, omit all the other logpoint info
-                'data' => $request + [
-                    'errorMessage' => 'File does not exist.',
-                ],
-            ]);
-
-            return;
-        }
-
-        $fileHash = hash('xxh32', file_get_contents($filePath));
-
-        if ($request['data']['file_hash'] !== $fileHash) {
-
-            $this->webSocketsClient->sendMessage([
-                'event' => 'logpoint-error-adding',
-                // TODO: Return only logpoint id, omit all the other logpoint info
-                'data' => $request + [
-                    'errorMessage' => 'PHP file contents in production environment differ. Please make sure you are using identical version ' .
-                        'to the one in production environment when setting breakpoints.',
-                ],
-            ]);
-
-            return;
-        }
-
-        // TODO: Verify that the logpoint isn't being set outside of the webroot
-        // $breakpointToAdd['webroot'] . $breakpointToAdd['file_path'];
-
-        $this->addBreakpoint($request);
+        $breakpointAdded = $this->addBreakpoint($request, true);
 
         $this->saveBreakpointsInConfigurationFile();
 
-        $this->webSocketsClient->sendMessage([
-            'event' => 'logpoint-added',
-            'header' => [
-                'logpoint_id' => $request['header']['logpoint_id'],
-                'project_id' => $request['header']['project_id'],
-            ],
-        ]);
+        if ($breakpointAdded) {
+            $this->webSocketsClient->sendMessage([
+                'event' => 'logpoint-added',
+                'header' => [
+                    'logpoint_id' => $request['header']['logpoint_id'],
+                    'project_id' => $request['header']['project_id'],
+                ],
+            ]);
+        }
     }
 
     public function handleLogpointRemove(array $request): void
@@ -92,6 +60,7 @@ class Agent
 
     public function handleLogpointsList(array $request): void
     {
+        // Should we inform the server about errors adding logpoints upon Agent startup?
         foreach ($request['data'] as $logpoint)
         {
             // TODO: Decrypt each logpoint's 'data'
@@ -203,17 +172,63 @@ class Agent
         ]);
     }
 
-    private function addBreakpoint(array $breakpointToAdd): void {
+    private function addBreakpoint(array $logpoint, bool $informServerAboutErrors = false): bool {
         // Should we check if the breakpoint hasn't been already added?
 
-        $breakpointToAdd = array_merge($breakpointToAdd['header'], $breakpointToAdd['data']);
+        $logpoint = array_merge($logpoint['header'], $logpoint['data']);
 
-        // TODO: Validate each logpoint here? (file path, file hash)
+        $filePath = $logpoint['webroot'] . $logpoint['file_path'];
+
+        if (file_exists($filePath) !== true) {
+            $errorMessage = 'File does not exist.';
+            $this->_reportErrorAddingLogpoint($logpoint['logpoint_id'], $logpoint['project_id'], 1001, $errorMessage, $informServerAboutErrors);
+            return false;
+        }
+
+        // Realpath also fails if path does not exist, so we do it only as an extra precaution
+        // after checking if the requested file exists
+        $realPath = realpath(dirname($filePath)) . DIRECTORY_SEPARATOR;
+
+        if (substr($realPath, 0, strlen($logpoint['webroot'])) !== $logpoint['webroot']) {
+            $errorMessage = 'Invalid file path - trying to set logpoint outside the webroot.';
+            $this->_reportErrorAddingLogpoint($logpoint['logpoint_id'], $logpoint['project_id'], 1000, $errorMessage, $informServerAboutErrors);
+            return false;
+        }
+
+        $fileHash = hash('xxh32', file_get_contents($filePath));
+
+        if ($logpoint['file_hash'] !== $fileHash) {
+            $errorMessage = 'PHP file contents in production environment differ. Please make sure you are using identical version ' .
+                'to the one in production environment when setting breakpoints.';
+            $this->_reportErrorAddingLogpoint($logpoint['logpoint_id'], $logpoint['project_id'], 1002, $errorMessage, $informServerAboutErrors);
+            return false;
+        }
 
         // TODO: Add support for conditional breakpoints
-        $breakpointToAdd['condition'] = '1';
+        $logpoint['condition'] = '1';
 
-        $this->breakpoints[$breakpointToAdd['logpoint_id']] = $breakpointToAdd;
+        $this->breakpoints[$logpoint['logpoint_id']] = $logpoint;
+
+        return true;
+    }
+
+    private function _reportErrorAddingLogpoint(string $logpointId, int $projectId, int $errorCode, string $errorReason, bool $informServerAboutErrors): void {
+
+        d('Error adding logpoint ' . $logpointId . ' - (' . $errorCode . ') ' . $errorReason);
+
+        if ($informServerAboutErrors) {
+            $this->webSocketsClient->sendMessage([
+                'event' => 'logpoint-error-adding',
+                'header' => [
+                    'logpoint_id' => $logpointId,
+                    'project_id' => $projectId,
+                ],
+                'data' => [
+                    'errorCode' => $errorCode,
+                    'errorMessage' => $errorReason,
+                ],
+            ]);
+        }
     }
 
     private function saveBreakpointsInConfigurationFile(): void
