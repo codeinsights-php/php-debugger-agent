@@ -97,7 +97,7 @@ class Agent
         // d('Sending logs');
 
         // TODO: Create "logs" folder automatically if it does not exist
-        $logPath = $this->extensionConfigDir . 'logs/';
+        $logPath = $this->extensionConfigDir . 'messages-outgoing/';
         $logs = scandir($logPath, SCANDIR_SORT_ASCENDING);
 
         foreach ($logs as $logFilename) {
@@ -288,7 +288,7 @@ class Agent
     }
 
     private function _verifyExtensionConfigDir(): void {
-        $logsFolder = $this->extensionConfigDir . 'logs/';
+        $logsFolder = $this->extensionConfigDir . 'messages-outgoing/';
 
         if (file_exists($logsFolder) === false) {
             dd('Extension hasn\'t been installed or is incorrectly configured. Logs folder "' . $logsFolder . '" for debug dumps does not exist.');
